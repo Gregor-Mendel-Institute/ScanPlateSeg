@@ -19,7 +19,7 @@ import numpy as np
 import scipy.ndimage as ndi
 import scipy.stats as stats
 from scipy.signal import medfilt
-import guiqwt.pyplot as plt
+#import guiqwt.pyplot as plt
 import matplotlib.pyplot as plt
 
 def plot(data):
