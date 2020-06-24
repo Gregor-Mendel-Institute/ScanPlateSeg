@@ -306,8 +306,9 @@ def getMaskRotationCont(img):
     cY = int(M["m01"] / M["m00"])
     return (cX, cY) , np.array(angles).mean()
 
-def getFilesAndCreateDir(inDirName, outDirName, sid):
-    fnames = glob.glob("%s/*%s.tif"%(inDirName, sid))
+def getFilesAndCreateDir(inDirName, outDirName, sid, prefix):
+    pattern = "%s/%s*%s.tif"%(inDirName, prefix, sid)
+    fnames = glob.glob(pattern)
     spath = "%s/%s"%(outDirName, sid)
     if fnames:
         if  os.path.exists(spath):
@@ -321,6 +322,9 @@ def getFilesAndCreateDir(inDirName, outDirName, sid):
         except OSError:  
             print ("Creation of the directory %s failed" % spath)
             sys.exit(1)
+    else:
+        print ("No file for %s found" %pattern)
+        sys.exit(1)
     fdict = {}
     for f in fnames:
         fdict[int(re.findall(r"day([0-9]*)_",f)[0])] = f
@@ -338,11 +342,11 @@ def procPlate(n, fname, m0r, sub, bbox):
     platet = transformItk(plate, plate, otrans)
     return (n, cropPlate(img3mask(platet,mt), bbox))
 
-def procPlateSet(inDirName, outDirName, sid, sub=4):
+def procPlateSet(inDirName, outDirName, sid, prefix="",sub=4):
     global reportLog
     reportLog["Directory Name"] = inDirName
     reportLog["Start time"] = strftime("%Y-%m-%d %H:%M:%S", gmtime())
-    files = getFilesAndCreateDir(inDirName, outDirName, sid)
+    files = getFilesAndCreateDir(inDirName, outDirName, sid, prefix)
     ## create reference mask based on the first plate
     plate0 = trimShape(loadTiff(files[0]), sub)
     m0 = detectDish(plate0,files[0])
@@ -369,23 +373,25 @@ reportLog={}
 desc="Identify dish and align plates"
 inDirName="."
 outDirName=None
+namePrefix=""
 
 dishId=None    # a NNN identifier od a dish
 
 def usage(desc):
-    global inDirName, outDirName, dishId
+    global inDirName, outDirName, dishId, namePrefix
     print(sys.argv[0]+":",   desc)
     print("Usage: ", sys.argv[0], "[switches]")
     print("Switches:")
     print("\t-h .......... this usage")
     print("\t-d name ..... directory with plant datasets (%s)"%inDirName)
     print("\t-o name ..... directory to store the result to (in a NNN subdirecory) (%s)"%"same as input")
+    print("\t-e string ... file name prefix (%s)"%filePrefix)
     print("\t-p NNN ...... ID of a dish (NNN) to process (all dishes)")
 
 def parsecmd(desc):
-    global inDirName, outDirName, dishId
+    global inDirName, outDirName, dishId, namePrefix
     try:
-        opts, Names = getopt.getopt(sys.argv[1:], "hd:p:o:", ["help"])
+        opts, Names = getopt.getopt(sys.argv[1:], "hd:p:o:e:", ["help"])
     except getopt.GetoptError as err:
         # print help information and exit:
         print(str(err)) # will print something like "option -a not recognized"
@@ -396,6 +402,8 @@ def parsecmd(desc):
             sys.exit()
         elif o in ("-d"):
             inDirName = a
+        elif o in ("-e"):
+            namePrefix = a
         elif o in ("-o"):
             outDirName = a
         elif o in ("-p"):
@@ -409,7 +417,7 @@ def saveAll(outDirName, dishId, plates, reportLog):
     imageio.imwrite("%s/%s/plates-%s.png"%(outDirName, dishId, dishId), plates.max(axis=0)[::4,::4,:])
 
 def main():
-    global inDirName, outDirName, dishId
+    global inDirName, outDirName, dishId, namePrefix
 
     parsecmd(desc)
     outDirName = outDirName if outDirName else inDirName
@@ -417,14 +425,14 @@ def main():
     if dishId:
         print("Input directory:  %s"%(inDirName))
         print("Output directory: %s/%s"%(outDirName,dishId))
-        plates, report = procPlateSet(inDirName, outDirName, dishId)
+        plates, report = procPlateSet(inDirName, outDirName, dishId, namePrefix)
         saveAll(outDirName, dishId, plates, report)
     else:
         for p in range(200):
             dishId = "%03d"%p
             reportLog={}
             # check if dishId images exist
-            pnames = glob.glob("%s/*%s.tif"%(inDirName, dishId))
+            pnames = glob.glob("%s/%s*%s.tif"%(inDirName, namePrefix, dishId))
             if pnames == []: continue   # no such plant
             fnames = glob.glob("%s/%s/plates-%s.png"%(outDirName, dishId, dishId))
             if fnames: 
@@ -432,7 +440,7 @@ def main():
                 continue # plates.tif exists
             print("Input directory:  %s"%(inDirName))
             print("Output directory: %s/%s"%(outDirName,dishId))
-            plates, report = procPlateSet(inDirName, outDirName, dishId)
+            plates, report = procPlateSet(inDirName, outDirName, dishId, namePrefix)
             saveAll(outDirName, dishId, plates, report)
 
 if __name__ == "__main__":
