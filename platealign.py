@@ -345,6 +345,7 @@ def procPlate(n, fname, m0r, sub, bbox):
 def procPlateSet(inDirName, outDirName, sid, prefix="",sub=4):
     global reportLog
     reportLog["Directory Name"] = inDirName
+    reportLog["File name prefix"] = prefix
     reportLog["Start time"] = strftime("%Y-%m-%d %H:%M:%S", gmtime())
     files = getFilesAndCreateDir(inDirName, outDirName, sid, prefix)
     ## create reference mask based on the first plate
