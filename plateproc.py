@@ -41,7 +41,7 @@ def usage(desc):
     print("Usage: ", sys.argv[0], "[switches]")
     print("Switches:")
     print("\t-h .......... this usage")
-    print("\t-h .......... be verbose")
+    print("\t-v .......... be verbose")
     print("\t-d name ..... directory with plant datasets (%s)"%inDirName)
     print("\t-o name ..... directory to store the result to (in a NNN subdirecory) (%s)"%"same as input")
     print("\t-e string ... file name prefix (%s)"%namePrefix)
