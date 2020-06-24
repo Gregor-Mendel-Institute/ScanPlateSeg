@@ -25,6 +25,7 @@ outDirName=None
 dishId=None    # a NNN identifier od a dish
 verbose=False
 rWidth = 120    # % 
+namePrefix=""
 
 def loadTiff(ifile):
     try:
@@ -35,7 +36,7 @@ def loadTiff(ifile):
         return None
 
 def usage(desc):
-    global inDirName, outDirName, dishId, verbose, rWidth
+    global inDirName, outDirName, dishId, verbose, rWidth,namePrefix
     print(sys.argv[0]+":",   desc)
     print("Usage: ", sys.argv[0], "[switches]")
     print("Switches:")
@@ -43,13 +44,14 @@ def usage(desc):
     print("\t-h .......... be verbose")
     print("\t-d name ..... directory with plant datasets (%s)"%inDirName)
     print("\t-o name ..... directory to store the result to (in a NNN subdirecory) (%s)"%"same as input")
+    print("\t-e string ... file name prefix (%s)"%namePrefix)
     print("\t-p NNN ...... ID of a dish (NNN) to process (all dishes)")
     print("\t-w INT ...... region width in %% of inter seed distance (%d %%)"%rWidth)
 
 def parsecmd(desc):
-    global inDirName, outDirName, dishId, verbose, rWidth
+    global inDirName, outDirName, dishId, verbose, rWidth, namePrefix
     try:
-        opts, Names = getopt.getopt(sys.argv[1:], "hvd:p:o:w:", ["help"])
+        opts, Names = getopt.getopt(sys.argv[1:], "hvd:p:o:w:e:", ["help"])
     except getopt.GetoptError as err:
         # print help information and exit:
         print(str(err)) # will print something like "option -a not recognized"
@@ -62,6 +64,8 @@ def parsecmd(desc):
             verbose=True
         elif o in ("-d"):
             inDirName = a
+        elif o in ("-e"):
+            namePrefix = a
         elif o in ("-o"):
             outDirName = a
         elif o in ("-p"):
@@ -69,7 +73,7 @@ def parsecmd(desc):
         elif o in ("-w"):
             rWidth = int(a)
 
-def procAll(inDirName, outDirName, dishId):
+def procAll(inDirName, outDirName, dishId, prefix):
     global verbose, rWidth
     reg_file="%s/%s/plant-regions-%s.png"%(outDirName,dishId,dishId)
     if os.path.isfile(reg_file):
@@ -85,6 +89,7 @@ def procAll(inDirName, outDirName, dishId):
     if verbose:
         print("Input directory:  %s"%(inDirName))
         print("Output directory/set: %s/%s"%(outDirName,dishId))
+        if prefix: print("File name prefix:  %s"%(prefix))
 
     # align the dishes, first check if a file with aligned dishes exists
     plates_file = "%s/%s/plates-%s.tif"%(outDirName,dishId,dishId)
@@ -92,7 +97,7 @@ def procAll(inDirName, outDirName, dishId):
     if plates is None:
         if verbose:
             print("Detecting and aligning dishes for set %s in %s"%(dishId,inDirName))
-        plates, reportLog = platealign.procPlateSet(inDirName, outDirName, dishId)
+        plates, reportLog = platealign.procPlateSet(inDirName, outDirName, dishId, prefix)
         with TiffWriter("%s/%s/plates-%s.tif"%(outDirName, dishId, dishId)) as tif: tif.save(plates)
         imageio.imwrite("%s/%s/plates-%s.png"%(outDirName, dishId, dishId), plates.max(axis=0)[::4,::4,:])
     else:
@@ -128,20 +133,20 @@ def procAll(inDirName, outDirName, dishId):
     with open("%s/%s/plateprocsplit.txt"%(outDirName, dishId), 'w') as reportfile: reportLogs.write(reportfile)
 
 def main():
-    global inDirName, outDirName, dishId
+    global inDirName, outDirName, dishId, namePrefix
 
     parsecmd(desc)
     outDirName = outDirName if outDirName else inDirName
 
     if dishId:
-        procAll(inDirName, outDirName, dishId)
+        procAll(inDirName, outDirName, dishId, namePrefix)
     else:
         for p in range(200):
             dishId = "%03d"%p
             # check if dishId images exist
             pnames = glob.glob("%s/*%s.tif"%(inDirName, dishId))
             if pnames == []: continue   # no such plant
-            procAll(inDirName, outDirName, dishId)
+            procAll(inDirName, outDirName, dishId, namePrefix)
 
 if __name__ == "__main__":
     main()
