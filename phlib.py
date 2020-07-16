@@ -8,7 +8,23 @@ import SimpleITK as sitk
 import numpy as np
 import cv2
 from scipy.sparse import csr_matrix
-import matplotlib.pyplot as plt
+
+def plot(data):
+    import matplotlib.pyplot as plt
+    # data is tuple of lists
+    for d in data:
+        plt.plot(range(len(d)),d)
+    #plt.pause(1)
+    plt.show(block=True)
+
+def disp(iimg, label = None, gray=False):
+    #import guiqwt.pyplot as plt
+    import matplotlib.pyplot as plt
+    plt.ioff()
+    #plt.imshow(iimg, interpolation='none')
+    plt.imshow(iimg)
+    #plt.pause(1)
+    plt.show(block=True)
 
 def toitk(image):
     """
