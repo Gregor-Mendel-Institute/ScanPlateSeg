@@ -129,11 +129,23 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
     # make premask large, if they do not overlap (happens for seeds)
     while not ovlaps.any(): 
         #ipdb.set_trace()
-        #print("select_largest_from_overlaps: dilation of prevmask")
+        print("select_overlaps: dilation of prevmask")
         prevmask = ndi.binary_dilation(prevmask, np.ones((7,1)))
         prevmask = ndi.binary_dilation(prevmask, np.ones((1,7)))
         ovlaps = np.unique(labels*prevmask)[1:] # the first one is background
+    
+    #remove regions too small <500, a typical seed is > 500
+    # Example:  apogwas2//021,5
+    if None and len(ovlaps) > 1:
+        aux=[]
+        for reg in ovlaps:
+            if (labels==reg).sum() > 500:
+                aux.append(reg)
+            else:
+                print("select_overlaps: removed small region")
+        ovlaps=aux
 
+    #ipdb.set_trace()
     # select all overlapping regions
     gmask = labels.copy()
     gmask[:]=0
@@ -266,8 +278,9 @@ def fix_border_plant(gmask, prevmask):
 def procplant(plates, plantnum, seedmask):
     gmasks=[seedmask]
     # dilate for the cases when the seed moves a bit prior to germination
-    # Example: seed 0 in apogwas2/005
-    prevmask = ndi.binary_dilation(seedmask, np.ones((19,19)))
+    # Example: seed 0 in apogwas2/005   np.ones((19,19)
+    # Example: seed 14 in apogwas2/021  np.ones((29,29)
+    prevmask = ndi.binary_dilation(seedmask, np.ones((29,29)))
     prevmasksum = seedmask.sum()
     failed = False
     for plnum in range(1,len(plates)):
@@ -280,7 +293,7 @@ def procplant(plates, plantnum, seedmask):
         threshold = 4
         repeat = True
         while repeat:
-            print("Plant %2d,%d: Using threshold %f"%(plantnum, plnum, threshold))
+            #print("Plant %2d,%d: Using threshold %f"%(plantnum, plnum, threshold))
             gmaskall = (gplate.astype(np.float) - rb) > threshold
             gmask = select_overlaps(gmaskall, prevmask, plantnum, plnum)
             #ipdb.set_trace()
@@ -290,15 +303,20 @@ def procplant(plates, plantnum, seedmask):
             repeat = gprof.max() > 3* pprof.max() and threshold < 7
             #ipdb.set_trace()
             pass
+        #ipdb.set_trace()
         gmasks.append(gmask)
         # the plant should normally not shrink, so shrinking is suspicious
         if gmask.sum() < 0.8*prevmasksum:
             print("Plant %2d,%d: Plant detection failed"%(plantnum, plnum))
             failed = True 
         else:
-            prevmask=gmasks[-1]
-            prevmasksum = seedmask.sum()
+            prevmask=gmask
+            prevmasksum = prevmask.sum()
         pass
+    masksums = [m.sum() for m in gmasks]
+    #print(masksums)
+
+    #ipdb.set_trace()
     return np.array(gmasks).astype(np.uint8), failed
    
 desc="segment individual plants in plate data"
