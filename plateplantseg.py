@@ -265,8 +265,10 @@ def fix_border_plant(gmask, prevmask):
 
 def procplant(plates, plantnum, seedmask):
     gmasks=[seedmask]
-    #prevmask = ndi.binary_dilation(seedmask, np.ones((19,19)))
-    prevmask = seedmask
+    # dilate for the cases when the seed moves a bit prior to germination
+    # Example: seed 0 in apogwas2/005
+    prevmask = ndi.binary_dilation(seedmask, np.ones((19,19)))
+    prevmasksum = seedmask.sum()
     failed = False
     for plnum in range(1,len(plates)):
         plate = plates[plnum]
@@ -281,18 +283,21 @@ def procplant(plates, plantnum, seedmask):
             print("Plant %2d,%d: Using threshold %f"%(plantnum, plnum, threshold))
             gmaskall = (gplate.astype(np.float) - rb) > threshold
             gmask = select_overlaps(gmaskall, prevmask, plantnum, plnum)
-            # if the mask of leftmost and rigtmost plants is suspiciously too large, try to fix it
+            #ipdb.set_trace()
             gprof=gmask.sum(axis=0)
             pprof=prevmask.sum(axis=0)
             threshold += 1
             repeat = gprof.max() > 3* pprof.max() and threshold < 7
-        #ipdb.set_trace()
+            #ipdb.set_trace()
+            pass
         gmasks.append(gmask)
-        if gmask.sum() < 0.8*prevmask.sum():
+        # the plant should normally not shrink, so shrinking is suspicious
+        if gmask.sum() < 0.8*prevmasksum:
             print("Plant %2d,%d: Plant detection failed"%(plantnum, plnum))
             failed = True 
         else:
             prevmask=gmasks[-1]
+            prevmasksum = seedmask.sum()
         pass
     return np.array(gmasks).astype(np.uint8), failed
    
