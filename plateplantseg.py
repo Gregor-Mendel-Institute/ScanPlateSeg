@@ -124,25 +124,38 @@ def getLargest (mask):
 
 def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
     ''' select the region in mask with overlaps in prevmask'''
+    minsize = 400   # minimal blob area to not to be regarded as noise (minimal seed size)
+
     labels, nlabels = measure.label(mask, return_num=True)
     ovlaps = np.unique(labels*prevmask)[1:] # the first one is background
-    # make premask large, if they do not overlap (happens for seeds)
-    while not ovlaps.any(): 
-        #ipdb.set_trace()
-        print("select_overlaps: dilation of prevmask")
+
+    # if area of overlapping reagions is too small (overlapping with a noise blob), 
+    #   make prevmask larger to find the plant
+    # Example:  apogwas2//021,22
+    sumovlaps=0
+    for lbl in ovlaps:
+        sumovlaps += (labels == lbl).sum()
+
+    # check in a loop
+    while sumovlaps < minsize: 
+        print(f"Plant {plantnum},{platenum} select_overlaps: dilation of prevmask")
         prevmask = ndi.binary_dilation(prevmask, np.ones((7,1)))
         prevmask = ndi.binary_dilation(prevmask, np.ones((1,7)))
         ovlaps = np.unique(labels*prevmask)[1:] # the first one is background
+        sumovlaps=0
+        for lbl in ovlaps:
+            sumovlaps += (labels == lbl).sum()
     
-    #remove regions too small <500, a typical seed is > 500
+    #remove regions too small <minsize, a typical seed is > minsize
     # Example:  apogwas2//021,5
-    if None and len(ovlaps) > 1:
+    if len(ovlaps) > 1:
         aux=[]
         for reg in ovlaps:
-            if (labels==reg).sum() > 500:
+            regsize = (labels==reg).sum()
+            if regsize > minsize:
                 aux.append(reg)
             else:
-                print("select_overlaps: removed small region")
+                print(f"Plant {plantnum},{platenum} select_overlaps: removed blob, size {regsize}")
         ovlaps=aux
 
     #ipdb.set_trace()
@@ -202,6 +215,7 @@ def drawHoughLines(gmask, lines):
             pt2 = (int(x0 - gmask.shape[0]*(-b)), int(y0 - gmask.shape[0]*(a)))
             cv2.line(cdst, pt1, pt2, (0,200,0), 3, cv2.LINE_AA)
     return cdst
+
 
 
 # a leftmost image can touch something 'big' on the left, usually a vertical strip (or strips)
@@ -275,6 +289,60 @@ def fix_border_plant(gmask, prevmask):
     omask = select_overlaps(gmask-ndi.binary_dilation(omask, np.ones((2,2))), prevmask)
     return omask
 
+def linmodel(idata):
+    ix = np.array(range(len(idata)))
+    x, data, m, c, res = linfit(ix, idata)
+    print(0,res)
+    reslist=[]
+    mlist1=[]
+    mlist2=[]
+    for bp in range(3, len(idata)-2, 1):
+        x1, data1, m1, c1, res1 = linfit(ix[:bp], idata[:bp])
+        x2, data2, m2, c2, res2 = linfit(ix[bp:], idata[bp:])
+        #ipdb.set_trace()
+        #linplot([ [x1, data1, m1, c1], [x2, data2, m2, c2] ])
+        print(bp,res1+res2)
+        reslist.append(res1+res2)
+        mlist1.append(m1)
+        mlist2.append(m2)
+    #print(reslist)
+    #print(mlist1)
+    #print(mlist2)
+    if np.min(reslist) < res/2:
+        xmin = np.argmin(reslist)
+        m1mean = np.mean(mlist1[:xmin+1])
+        m2mean = np.mean(mlist2[xmin:])
+        print(xmin, m1mean, m2mean)
+        if m1mean < m2mean:
+            print(f"Late germination, day {xmin+3}")
+            return f"Late germination, day {xmin+3}"
+        else:
+            print(f"Stopped growing, day {xmin+3}")
+            return f"Stopped growing, day {xmin+3}"
+    else:
+        if np.max(idata) < 50:
+            print(f"Not growing")
+            return "Not growing"
+        else:
+            print(f"Normal Growth")
+            return "Normal growth"
+    #linplot([[x, data, m, c]])
+    #ipdb.set_trace()
+    #pass
+
+def linfit(x, data):
+    A = np.vstack([x, np.ones(len(x))]).T
+    (m, c), res = np.linalg.lstsq(A, data, rcond=None)[:2]
+    return x, data, m, c, np.sqrt(res[0])
+
+def linplot(pdata):
+    #pdata; [[x, data, m, c], [...], ...)
+    for (x, data, m, c) in pdata:
+        _ = plt.plot(x, data, 'o', label='Original data', markersize=10)
+        _ = plt.plot(x, m*x + c, 'r', label='Fitted line')
+    plt.show()
+
+
 def procplant(plates, plantnum, seedmask):
     gmasks=[seedmask]
     # dilate for the cases when the seed moves a bit prior to germination
@@ -282,7 +350,7 @@ def procplant(plates, plantnum, seedmask):
     # Example: seed 14 in apogwas2/021  np.ones((29,29)
     prevmask = ndi.binary_dilation(seedmask, np.ones((29,29)))
     prevmasksum = seedmask.sum()
-    failed = False
+    return_state = ""
     for plnum in range(1,len(plates)):
         plate = plates[plnum]
         gplate = cv2.cvtColor(plate, cv2.COLOR_RGB2GRAY)
@@ -291,33 +359,28 @@ def procplant(plates, plantnum, seedmask):
         rb=phlib.rolling_ball_filter(gplate,4,9)
 
         threshold = 4
-        repeat = True
-        while repeat:
-            #print("Plant %2d,%d: Using threshold %f"%(plantnum, plnum, threshold))
-            gmaskall = (gplate.astype(np.float) - rb) > threshold
-            gmask = select_overlaps(gmaskall, prevmask, plantnum, plnum)
-            #ipdb.set_trace()
-            gprof=gmask.sum(axis=0)
-            pprof=prevmask.sum(axis=0)
-            threshold += 1
-            repeat = gprof.max() > 3* pprof.max() and threshold < 7
-            #ipdb.set_trace()
-            pass
+        gmaskall = (gplate.astype(np.float) - rb) > threshold
+        gmask = select_overlaps(gmaskall, prevmask, plantnum, plnum)
         #ipdb.set_trace()
         gmasks.append(gmask)
         # the plant should normally not shrink, so shrinking is suspicious
         if gmask.sum() < 0.8*prevmasksum:
             print("Plant %2d,%d: Plant detection failed"%(plantnum, plnum))
-            failed = True 
+            #return_state = "failed"
         else:
             prevmask=gmask
             prevmasksum = prevmask.sum()
         pass
     masksums = [m.sum() for m in gmasks]
-    #print(masksums)
+    maskheight = [np.nonzero(m)[0].max() - np.nonzero(m)[0].min() for m in gmasks]
+    print(masksums)
+    print(maskheight)
+    #plot([maskheight])
+    if not return_state:
+        return_state = linmodel(maskheight)
 
     #ipdb.set_trace()
-    return np.array(gmasks).astype(np.uint8), failed
+    return np.array(gmasks).astype(np.uint8), return_state
    
 desc="segment individual plants in plate data"
 dirName="."
@@ -388,7 +451,7 @@ def main():
                     continue
             plantnames=sorted(glob.glob("%s/%s/plant-*.tif"%(dirName, dishId)))
             dishIds[dishId] = plantnames
-    #ipdb.set_trace()
+    ipdb.set_trace()
 
     for dishId in dishIds:
         seedsmask = loadTiff( "%s/%s/seeds-mask-%s.tif"%(dirName,dishId,dishId))
@@ -402,7 +465,6 @@ def main():
        
         for plantname in plantnames:
             #ipdb.set_trace()
-            failed = False
             ulx, uly, lrx, lry=np.array(re.findall(r"\d+",plantname.split("/")[-1])[2:]).astype(np.int)
             plant = loadTiff(plantname)
             pmaskname = plantname.replace("plant-","pmask-")
@@ -414,23 +476,25 @@ def main():
                 print("Processing %s"%pmaskname)
                 #ipdb.set_trace()
                 pnum = int(re.findall(r"plant-[0-9]*-([0-9]*)",plantname.split("/")[-1])[0])
-                masks, failed = procplant(plant, pnum, seedsmask[uly:lry,ulx:lrx][...,0] == 0)
-                if failed:
-                    with TiffWriter(plantname.replace("plant-","pmask-").replace(".tif","-failed.tif")) as tif:
-                        tif.save(masks,compress=5)
-                else:
-                    with TiffWriter(plantname.replace("plant-","pmask-")) as tif:
-                        tif.save(masks,compress=5)
+                masks, return_state = procplant(plant, pnum, seedsmask[uly:lry,ulx:lrx][...,0] == 0)
+                with TiffWriter(plantname.replace("plant-","pmask-")) as tif:
+                   tif.save(masks,compress=5)
 
 
             #rslt = evaluate_masks(masks)
             plantmasks[...,uly:lry,ulx:lrx] += 255*masks
             plantoverview[uly:lry,ulx:lrx,...] = plant.max(axis=0)
-            if failed:
-                plantoverview[uly:uly+10,ulx:lrx,...] = (255,0,0)
-                plantoverview[lry-10:lry,ulx:lrx,...] = (255,0,0)
-            #plantoverview[uly:uly+30,ulx:lrx,...] = 128+(128*np.array(rslt)).astype(np.int)
-            #ipdb.set_trace()
+            if "failed" in return_state: hcolor = (255,0,0)
+            #elif "Normal growth" in return_state: hcolor = (0,255,0)
+            elif "Not growing" in return_state: hcolor = (255,255,0)
+            elif "Stopped growing" in return_state: hcolor = (0, 0, 255)
+            elif "Late germination" in return_state: hcolor = (0, 255, 0)
+
+            if not "Normal growth" in return_state:  
+                plantoverview[uly:uly+20,ulx:lrx,...] = hcolor
+                plantoverview[lry-20:lry,ulx:lrx,...] = hcolor
+                #plantoverview[uly:uly+30,ulx:lrx,...] = 128+(128*np.array(rslt)).astype(np.int)
+                #ipdb.set_trace()
             pass
 
         plantoverview = phlib.img3overlay(plantoverview, plantmasks.max(axis=0))
