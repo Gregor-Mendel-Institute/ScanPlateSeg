@@ -10,8 +10,8 @@ from importlib import reload
 from tifffile import TiffWriter, TiffFile
 #import SimpleITK as sitk
 import numpy as np
-import sys, glob, re, os, getopt, csv
-import cv2, math
+import sys, glob, re, os, getopt, csv, tempfile
+import cv2, math, imageio
 import ipdb
 import phlib
 reload(phlib)
@@ -24,6 +24,106 @@ import scipy.ndimage as ndi
 #from scipy.signal import medfilt
 #import guiqwt.pyplot as plt
 import matplotlib.pyplot as plt
+from odf.opendocument import OpenDocumentSpreadsheet
+from odf.style import Style, TextProperties, ParagraphProperties, TableColumnProperties, TableCellProperties,TableRowProperties
+from odf.text import P, A
+from odf.table import Table, TableColumn, TableRow, TableCell
+#from odf.draw import Frame, Image
+from odf import draw
+from odf.office import Annotation
+
+class ODSWriter:
+
+    def __init__(self, dishId, hdr):
+        self.hdr = hdr
+        self.doc = OpenDocumentSpreadsheet()
+        self.table = Table(name=str(dishId))
+        self.doc.spreadsheet.addElement(self.table)
+        #styles
+        self.itemRowStyle1 = Style(name="itemRowStyle", family="table-row")
+        self.itemRowStyle1.addElement(TableRowProperties(rowheight="10mm"))
+        self.doc.automaticstyles.addElement(self.itemRowStyle1)
+
+        self.itemRowStyle3 = Style(name="itemRowStyle", family="table-row")
+        self.itemRowStyle3.addElement(TableRowProperties(rowheight="30mm"))
+        self.doc.automaticstyles.addElement(self.itemRowStyle3)
+
+        self.colStyle1 = Style(name="colStyle1", family="table-column")
+        self.colStyle1.addElement(TableColumnProperties(columnwidth="30mm"))
+        self.doc.automaticstyles.addElement(self.colStyle1)
+
+        self.colStylePlot = Style(name="colStylePlot", family="table-column")
+        self.colStylePlot.addElement(TableColumnProperties(columnwidth="40mm"))
+        self.doc.automaticstyles.addElement(self.colStylePlot)
+
+        self.colStyleImg = Style(name="colStyleImg", family="table-column")
+        self.colStyleImg.addElement(TableColumnProperties(columnwidth="200mm"))
+        self.doc.automaticstyles.addElement(self.colStyleImg)
+        self.exrow=0
+
+        #add columns
+        tcol = TableColumn(stylename=self.colStyle1)
+        self.table.addElement(tcol)
+        tcol = TableColumn(stylename=self.colStyle1)
+        self.table.addElement(tcol)
+        tcol = TableColumn(stylename=self.colStyle1)
+        self.table.addElement(tcol)
+        tcol = TableColumn(stylename=self.colStyle1)
+        self.table.addElement(tcol)
+        tcol = TableColumn(stylename=self.colStylePlot)
+        self.table.addElement(tcol)
+        tcol = TableColumn(stylename=self.colStyleImg)
+        self.table.addElement(tcol)
+
+        self.writehdr(hdr)
+
+    def writehdr(self, items): 
+        self.exrow += 1
+        tr = TableRow(stylename=self.itemRowStyle1)
+        for item in items:
+            tc = TableCell() #empty cell
+            tr.addElement(tc)
+            p = P(text=item)
+            tc.addElement(p)
+        self.table.addElement(tr)
+        return
+
+    def writerow(self, items): 
+        self.exrow += 1
+            #pass
+        tr = TableRow(stylename=self.itemRowStyle3)
+        cells = "ABCDEFGHIJKLM"
+        for n in range(len(items)):
+            if isinstance(items[n], int):
+                tc = TableCell(valuetype="int", value=str(items[n]))
+                p = P(text=items[n])
+            elif isinstance(items[n], float):
+                tc = TableCell(valuetype="float", value=str("%4.1f"%items[n]))
+                p = P(text=items[n])
+            elif isinstance(items[n], np.ndarray):
+                tc = TableCell() #empty cell
+                fname = tempfile.mktemp(".png")
+                sf=0.10
+                im = items[n]
+                imageio.imwrite(fname, items[n])
+                f = draw.Frame(endcelladdress="import.%s%d"%(cells[n],self.exrow),endx="%dmm"%int(sf*im.shape[1]), endy="%dmm"%int(sf*im.shape[0]))
+                tc.addElement(f)
+                href=self.doc.addPicture(fname)
+                i = draw.Image(href=href, type="simple", show="embed", actuate="onLoad")
+                f.addElement(i)
+                p = P(text="")
+                i.addElement(p)
+            else:
+                tc = TableCell() #empty cell
+                p = P(text=items[n])
+            tc.addElement(p)
+            tr.addElement(tc)
+        self.table.addElement(tr)
+        return
+
+    def save(self, ofname):
+        print("%s: %d hesiel"%(ofname,self.exrow-1))
+        self.doc.save(ofname)
 
 def img3mask(img, mask):
     if len(img) != len(mask):
@@ -292,6 +392,10 @@ def fix_border_plant(gmask, prevmask):
 
 # classify plant growth using a piecewise linear model
 def classifyGrowth(idata):
+    # free parameters
+    NormalGrowthFactor = 1./3.
+    NotGrowingSizeThreshold = 50
+
     ix = np.array(range(len(idata)))
     # fit linear model to all
     x, data, allm, c, allres = linfit(ix, idata)
@@ -316,7 +420,7 @@ def classifyGrowth(idata):
         mlist1.append(m1)
         mlist2.append(m2)
 
-    if np.min(reslist) < allres/2:
+    if np.min(reslist) < NormalGrowthFactor* allres:
         xmin = np.argmin(reslist)
         m1mean = np.mean(mlist1[:xmin+1])
         m2mean = np.mean(mlist2[xmin:])
@@ -333,7 +437,7 @@ def classifyGrowth(idata):
                 print(f"Stopped growing, day {xmin+3}")
                 return ("Stopped growing", xmin+3, bplots[xmin])
     else:
-        if np.max(idata) < 50:
+        if np.max(idata) < NotGrowingSizeThreshold:
             print(f"Not growing")
             return ("Not growing", None, allplot)
         else:
@@ -356,6 +460,7 @@ def linplot(pdata):
 
 
 def linplotarray(pdata):
+    plt.clf()
     for (x, data, m, c) in pdata:
         _ = plt.plot(x, data, 'o', label='Original data', markersize=10)
         _ = plt.plot(x, m*x + c, 'r', label='Fitted line')
@@ -445,8 +550,6 @@ def main():
     parsecmd(desc)
     plantNum=None
 
-    # create lists of directories and file to process
-
     dishFiles = {}    #dishes to process, organized by dishId
     reprocessname=None
     if dishId:
@@ -490,6 +593,9 @@ def main():
             plantoverview=seedsmask.copy()
             plantmasks = np.zeros((11,seedsmask.shape[0],seedsmask.shape[1])).astype(np.uint8)
        
+        reportWriter = ODSWriter(dishId, ["Plant number","Type","Growth rate","Break point", "Growth plot"])
+        #reportWriter.writerow(ilist[0])
+
         for plantname in plantnames:
             #ipdb.set_trace()
             ulx, uly, lrx, lry=np.array(re.findall(r"\d+",plantname.split("/")[-1])[2:]).astype(np.int)
@@ -510,26 +616,41 @@ def main():
             #plantoverview[uly:lry,ulx:lrx,...] = phlib.img3overlay(plant.max(axis=0), masks.max(axis=0))
             plantoverview[uly:lry,ulx:lrx,...] = np.maximum(plantoverview[uly:lry,ulx:lrx,...], phlib.img3overlay(plant.max(axis=0), masks.max(axis=0)))
             # draw color marks 
+            cmasks = np.concatenate(masks, axis=1)[::2,::2]
+            nz = np.nonzero(cmasks)
+            cmasks = cmasks[nz[0].min()-5 : nz[0].max()+5,:]
+            cplant = np.concatenate(plant, axis=1)[::2,::2]
+            cplant = cplant[nz[0].min()-5 : nz[0].max()+5,:]
+            oplant = phlib.img3overlay(cplant, cmasks)
+            #ipdb.set_trace()
             if "Detection error" in return_state[0]: 
+                reportRow = [str(pnum), return_state[0], "", return_state[1]]
                 hcolor = (255,0,0)
             #elif "Normal growth" in return_state: hcolor = (0,255,0)
             elif "Not growing" in return_state[0]: 
+                reportRow = [str(pnum), return_state[0], "", ""] 
                 hcolor = (255,255,0)
             elif "Stopped growing" in return_state[0]: 
+                reportRow = [str(pnum), return_state[0], "", return_state[1]]
                 hcolor = (0, 0, 255)
             elif "Late germination" in return_state[0]: 
+                reportRow = [str(pnum), return_state[0], "", return_state[1]] 
                 hcolor = (0, 255, 0)
+            elif "Normal growth" in return_state[0]: 
+                reportRow = [str(pnum), return_state[0], return_state[1], "", return_state[-1], oplant] 
+            reportWriter.writerow(reportRow)
 
             if not "Normal growth" in return_state[0]:  
                 plantoverview[uly:uly+20,ulx:lrx,...] = hcolor
                 plantoverview[lry-20:lry,ulx:lrx,...] = hcolor
 
+
             # create report
             #return_state = (type, break point/growth rate, growth plot)
-            #ipdb.set_trace()
             pass
 
 
+        reportWriter.save("%s/%s/plant_report.ods"%(dirName,dishId))
         #ipdb.set_trace()
         with TiffWriter(plantmasks_name) as tif:
             tif.save(plantmasks,compress=5)
