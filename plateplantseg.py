@@ -164,20 +164,21 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
     gmask[:]=0
     for lbl in ovlaps:
         gmask += (labels == lbl)
-
-    if plantnum >= 0:
-        gprof=gmask.sum(axis=0)
-        pprof=prevmask.sum(axis=0)
-        #print( gprof.max(), 2* pprof.max())
-        if gprof.max() > 2* pprof.max():
-            if plantnum in (0, 12): # left side images
-                print("Plant %2d,%d fix left plant"%(plantnum, platenum))
-                gmask = fix_left_plant(gmask, prevmask)
-                #gmask2 = fix_border_plant(gmask, prevmask)
+        # the problems occur for large platenums and height increase may be large for platenum == 1
+        # thus, check only id platenum > 1
+        if platenum > 1 and plantnum in (0, 12, 13, 23): # left side images
+            # if gmask height increases too much, we have the border problem. So fix it
+            gmaskheight = np.nonzero(gmask)[0].max() - np.nonzero(gmask)[0].min()
+            pmaskheight = np.nonzero(prevmask)[0].max() - np.nonzero(prevmask)[0].min()
+            #ipdb.set_trace()
+            if gmaskheight > 2* pmaskheight:
+                if plantnum in (0, 12): # left side images
+                    print("Plant %2d,%d fix left plant"%(plantnum, platenum))
+                    gmask = fix_left_plant(gmask, prevmask)
+                elif plantnum in (11, 23): # right side images
+                    print("Plant %2d,%d fix right plant"%(plantnum, platenum))
+                    gmask = fix_right_plant(gmask, prevmask)
                 pass
-            elif plantnum in (11, 23): # left side images
-                print("Plant %2d,%d fix right plant"%(plantnum, platenum))
-                gmask = fix_right_plant(gmask, prevmask)
         #ipdb.set_trace()
     return gmask
 
@@ -289,42 +290,51 @@ def fix_border_plant(gmask, prevmask):
     omask = select_overlaps(gmask-ndi.binary_dilation(omask, np.ones((2,2))), prevmask)
     return omask
 
-def linmodel(idata):
+# classify plant growth using a piecewise linear model
+def classifyGrowth(idata):
     ix = np.array(range(len(idata)))
-    x, data, m, c, res = linfit(ix, idata)
-    print(0,res)
+    # fit linear model
+    x, data, m, c, linres = linfit(ix, idata)
+    #print(0,linres)
     reslist=[]
     mlist1=[]
     mlist2=[]
+    # find a piecewise linear model with lowest residuals
+    # split data in two parts and fit linear models to them
     for bp in range(3, len(idata)-2, 1):
         x1, data1, m1, c1, res1 = linfit(ix[:bp], idata[:bp])
         x2, data2, m2, c2, res2 = linfit(ix[bp:], idata[bp:])
         #ipdb.set_trace()
         #linplot([ [x1, data1, m1, c1], [x2, data2, m2, c2] ])
-        print(bp,res1+res2)
+        #print(bp,res1+res2)
+        # estimate residuals as sum of part residuals 
         reslist.append(res1+res2)
+        # used to classify growth type
         mlist1.append(m1)
         mlist2.append(m2)
-    #print(reslist)
-    #print(mlist1)
-    #print(mlist2)
-    if np.min(reslist) < res/2:
+
+    if np.min(reslist) < linres/2:
         xmin = np.argmin(reslist)
         m1mean = np.mean(mlist1[:xmin+1])
         m2mean = np.mean(mlist2[xmin:])
-        print(xmin, m1mean, m2mean)
+        #print(xmin, m1mean, m2mean)
         if m1mean < m2mean:
             print(f"Late germination, day {xmin+3}")
             return f"Late germination, day {xmin+3}"
         else:
-            print(f"Stopped growing, day {xmin+3}")
-            return f"Stopped growing, day {xmin+3}"
+            #ipdb.set_trace()
+            if np.min(idata) == 0:
+                print(f"Detection error, day {xmin+3}")
+                return f"Detection error, day {xmin+3}"
+            else:
+                print(f"Stopped growing, day {xmin+3}")
+                return f"Stopped growing, day {xmin+3}"
     else:
         if np.max(idata) < 50:
             print(f"Not growing")
             return "Not growing"
         else:
-            print(f"Normal Growth")
+            print(f"Normal growth")
             return "Normal growth"
     #linplot([[x, data, m, c]])
     #ipdb.set_trace()
@@ -363,21 +373,17 @@ def procplant(plates, plantnum, seedmask):
         gmask = select_overlaps(gmaskall, prevmask, plantnum, plnum)
         #ipdb.set_trace()
         gmasks.append(gmask)
-        # the plant should normally not shrink, so shrinking is suspicious
+        # the plant should normally not shrink, so shrinking is suspicious. Keep the last good mask
         if gmask.sum() < 0.8*prevmasksum:
             print("Plant %2d,%d: Plant detection failed"%(plantnum, plnum))
-            #return_state = "failed"
         else:
             prevmask=gmask
             prevmasksum = prevmask.sum()
         pass
-    masksums = [m.sum() for m in gmasks]
-    maskheight = [np.nonzero(m)[0].max() - np.nonzero(m)[0].min() for m in gmasks]
-    print(masksums)
+    maskheight = [np.nonzero(m)[0].max() - np.nonzero(m)[0].min() if m.max() > 0 else 0 for m in gmasks]
     print(maskheight)
-    #plot([maskheight])
     if not return_state:
-        return_state = linmodel(maskheight)
+        return_state = classifyGrowth(maskheight)
 
     #ipdb.set_trace()
     return np.array(gmasks).astype(np.uint8), return_state
@@ -404,7 +410,7 @@ def usage(desc):
     print("\t-r ............... rebuild all")
 
 def parsecmd(desc):
-    global dirName, dishId, plantNum, subStart, rWidth, rebuildAll
+    global dirName, dishId, subStart, rWidth, rebuildAll
     try:
         opts, Names = getopt.getopt(sys.argv[1:], "hrd:s:p:", ["help"])
     except getopt.GetoptError as err:
@@ -433,14 +439,21 @@ def main():
 
     # create lists of directories and file to process
 
-    dishIds = {}    #dishes to process
+    dishFiles = {}    #dishes to process, organized by dishId
     reprocessname=None
     if dishId:
         if "," in dishId:
             dishId, plantNum = dishId.split(",")
-            reprocessname = glob.glob("%s/%s/plant-%03d-%02d_*.tif"%(dirName, dishId, int(dishId), int(plantNum)))[0]
-        plantnames=sorted(glob.glob("%s/%s/plant-*.tif"%(dirName, dishId)))
-        dishIds[dishId] = plantnames
+            globname = "%s/%s/plant-%03d-%02d_*.tif"%(dirName, dishId, int(dishId), int(plantNum))
+            reprocessname = glob.glob(globname)
+            if not reprocessname:
+                print ("%s: Error -- No files found for '%s'"%(sys.argv[0], globname))
+                sys.exit(0)
+
+            dishFiles[dishId] = reprocessname
+        else:
+            plantnames=sorted(glob.glob("%s/%s/plant-*.tif"%(dirName, dishId)))
+            dishFiles[dishId] = plantnames
     else:
         for p in range(subStart, 200):
             dishId = "%03d"%p
@@ -450,18 +463,24 @@ def main():
                     print("Skipping %s"%"%s/%s"%(dirName,dishId))
                     continue
             plantnames=sorted(glob.glob("%s/%s/plant-*.tif"%(dirName, dishId)))
-            dishIds[dishId] = plantnames
-    ipdb.set_trace()
+            dishFiles[dishId] = plantnames
+    #ipdb.set_trace()
 
-    for dishId in dishIds:
+    #process dishes one by one
+    for dishId in dishFiles:
         seedsmask = loadTiff( "%s/%s/seeds-mask-%s.tif"%(dirName,dishId,dishId))
-        plantnames = dishIds[dishId]
+        plantnames = dishFiles[dishId]
         plantmasks_name = "%s/%s/pmask-%s.tif"%(dirName,dishId,dishId)
         plantoverview_name = "%s/%s/pmask-ovl-%s.tif"%(dirName,dishId,dishId)
 
         #ipdb.set_trace()
-        plantoverview=seedsmask.copy()
-        plantmasks = np.zeros((11,seedsmask.shape[0],seedsmask.shape[1])).astype(np.uint8)
+
+        if reprocessname:
+            plantoverview = loadTiff(plantoverview_name)
+            plantmasks = loadTiff(plantmasks_name)
+        else:
+            plantoverview=seedsmask.copy()
+            plantmasks = np.zeros((11,seedsmask.shape[0],seedsmask.shape[1])).astype(np.uint8)
        
         for plantname in plantnames:
             #ipdb.set_trace()
@@ -469,22 +488,21 @@ def main():
             plant = loadTiff(plantname)
             pmaskname = plantname.replace("plant-","pmask-")
             # Reload, if plant mask exists
-            if not rebuildAll and os.path.isfile(pmaskname) and plantname != reprocessname:
-                print("Reloaded %s"%pmaskname)
-                masks = loadTiff(pmaskname)
-            else:
-                print("Processing %s"%pmaskname)
-                #ipdb.set_trace()
-                pnum = int(re.findall(r"plant-[0-9]*-([0-9]*)",plantname.split("/")[-1])[0])
-                masks, return_state = procplant(plant, pnum, seedsmask[uly:lry,ulx:lrx][...,0] == 0)
-                with TiffWriter(plantname.replace("plant-","pmask-")) as tif:
-                   tif.save(masks,compress=5)
-
+            print("Processing %s"%pmaskname)
+            #ipdb.set_trace()
+            pnum = int(re.findall(r"plant-[0-9]*-([0-9]*)",plantname.split("/")[-1])[0])
+            masks, return_state = procplant(plant, pnum, seedsmask[uly:lry,ulx:lrx][...,0] == 0)
+            #ipdb.set_trace()
+            with TiffWriter(plantname.replace("plant-","pmask-")) as tif:
+               tif.save(masks,compress=5)
 
             #rslt = evaluate_masks(masks)
-            plantmasks[...,uly:lry,ulx:lrx] += 255*masks
-            plantoverview[uly:lry,ulx:lrx,...] = plant.max(axis=0)
-            if "failed" in return_state: hcolor = (255,0,0)
+            #plantmasks[...,uly:lry,ulx:lrx] += 255*masks
+            plantmasks[...,uly:lry,ulx:lrx] = np.maximum(plantmasks[...,uly:lry,ulx:lrx], 255*masks)
+            #plantoverview[uly:lry,ulx:lrx,...] = phlib.img3overlay(plant.max(axis=0), masks.max(axis=0))
+            plantoverview[uly:lry,ulx:lrx,...] = np.maximum(plantoverview[uly:lry,ulx:lrx,...], phlib.img3overlay(plant.max(axis=0), masks.max(axis=0)))
+            #ipdb.set_trace()
+            if "Detection error" in return_state: hcolor = (255,0,0)
             #elif "Normal growth" in return_state: hcolor = (0,255,0)
             elif "Not growing" in return_state: hcolor = (255,255,0)
             elif "Stopped growing" in return_state: hcolor = (0, 0, 255)
@@ -497,14 +515,13 @@ def main():
                 #ipdb.set_trace()
             pass
 
-        plantoverview = phlib.img3overlay(plantoverview, plantmasks.max(axis=0))
+        #ipdb.set_trace()
         with TiffWriter(plantmasks_name) as tif:
             tif.save(plantmasks,compress=5)
         #overview image
         with TiffWriter(plantoverview_name) as tif:
             #tif.save(plantoverview,compress=5)
             tif.save(plantoverview)
-            #tif.save(phlib.img3overlay(plantoverview,plantmasks.sum(axis=0)),compress=5)
     #ipdb.set_trace()
     pass
 
