@@ -138,6 +138,7 @@ def main():
     parsecmd(desc)
     outDirName = outDirName if outDirName else inDirName
 
+    ipdb.set_trace()
     if dishId:
         procAll(inDirName, outDirName, dishId, namePrefix)
     else:
