@@ -15,6 +15,7 @@ from scipy.sparse import csr_matrix
 import scipy.ndimage as ndi
 
 def plot(data):
+    plt.clf()
     # data is tuple of lists
     for d in data:
         plt.plot(range(len(d)),d)
@@ -23,6 +24,7 @@ def plot(data):
 
 # display image; if 3D concatenate to one 2D image 
 def disp(iimg, label = None, gray=False):
+    plt.clf()
     if isinstance(iimg, list):
         plt.imshow(np.concatenate(iimg,axis=1))
     else:
