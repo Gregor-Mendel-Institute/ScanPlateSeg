@@ -18,18 +18,8 @@ import scipy.ndimage as ndi
 import configparser, imageio
 from time import gmtime, strftime
 import ipdb
+from phlib import disp, plot
 
-def plot(data):
-    plt.plot(data)
-    plt.show()
-
-def disp(iimg, label = None, gray=False):
-    """ Display an image using pylab
-    """
-    import pylab, matplotlib
-    matplotlib.interactive(True)
-    matplotlib.pyplot.imshow(iimg, interpolation='none')
- 
 def loadTiff(ifile):
     try:
         with TiffFile(str(ifile)) as tfile:
@@ -127,29 +117,6 @@ def maskPlate3(img, mask):
         band[np.nonzero(mask==0)] = band[np.nonzero(mask!=0)].mean()
     return img
 
-
-def rolling_ball_filter(img, sub, ball_radius, top=False):
-    """Rolling ball filter implemented with morphology operations """
-    img=img[::sub,::sub,:]
-    se  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(2*ball_radius,2*ball_radius))
-    img = img.copy()
-    if img.ndim == 3:
-        for b in range(3):
-            iband = img[:,:,b]
-            if not top:
-                iband = ndi.grey_erosion(iband, structure=se)
-                img[:,:,b] = ndi.grey_dilation(iband, structure=se)
-            else:
-                iband = ndi.grey_dilation(iband, structure=se)
-                img[:,:,b] = ndi.grey_erosion(iband, structure=se)
-    else:
-        if not top:
-            img = ndi.grey_erosion(img, structure=se)
-            img = ndi.grey_dilation(img, structure=se)
-        else:
-            img = ndi.grey_dilation(img, structure=se)
-            img = ndi.grey_erosion(img, structure=se)
-    return ndi.zoom(img, (sub,sub,1), order=1) 
 
 # crop to nearest dimension, which is multiple of n
 def trimShape(img, n):
@@ -337,7 +304,8 @@ def procPlate(n, fname, m0r, sub, bbox):
     if m is None: 
         ##with open("%s/%s/result.txt"%(dirname,sid), 'w') as reportfile: reportLog.write(reportfile)
         return None
-    otrans = register(m0r, m, sub, algmax="max",ssigma=7)
+    #otrans = register(m0r, m, sub, algmax="max",ssigma=7) #ssigma=7 is unstable
+    otrans = register(m0r, m, sub, algmax="max")
     mt = transformItk(m0r, m, otrans)
     platet = transformItk(plate, plate, otrans)
     return (n, cropPlate(img3mask(platet,mt), bbox))
@@ -386,7 +354,7 @@ def usage(desc):
     print("\t-h .......... this usage")
     print("\t-d name ..... directory with plant datasets (%s)"%inDirName)
     print("\t-o name ..... directory to store the result to (in a NNN subdirecory) (%s)"%"same as input")
-    print("\t-e string ... file name prefix (%s)"%filePrefix)
+    #print("\t-e string ... file name prefix (%s)"%filePrefix)
     print("\t-p NNN ...... ID of a dish (NNN) to process (all dishes)")
 
 def parsecmd(desc):
