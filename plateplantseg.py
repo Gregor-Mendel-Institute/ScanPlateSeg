@@ -293,50 +293,52 @@ def fix_border_plant(gmask, prevmask):
 # classify plant growth using a piecewise linear model
 def classifyGrowth(idata):
     ix = np.array(range(len(idata)))
-    # fit linear model
-    x, data, m, c, linres = linfit(ix, idata)
-    #print(0,linres)
+    # fit linear model to all
+    x, data, allm, c, allres = linfit(ix, idata)
+    allplot = linplotarray([[x, data, allm, allres]])
+    #print(0,allres)
     reslist=[]
     mlist1=[]
     mlist2=[]
     # find a piecewise linear model with lowest residuals
     # split data in two parts and fit linear models to them
+    bplots=[]
     for bp in range(3, len(idata)-2, 1):
         x1, data1, m1, c1, res1 = linfit(ix[:bp], idata[:bp])
         x2, data2, m2, c2, res2 = linfit(ix[bp:], idata[bp:])
         #ipdb.set_trace()
         #linplot([ [x1, data1, m1, c1], [x2, data2, m2, c2] ])
+        bplots.append(linplotarray([ [x1, data1, m1, c1], [x2, data2, m2, c2] ]))
         #print(bp,res1+res2)
-        # estimate residuals as sum of part residuals 
+        # estimate residuals as sum of partial residuals 
         reslist.append(res1+res2)
         # used to classify growth type
         mlist1.append(m1)
         mlist2.append(m2)
 
-    if np.min(reslist) < linres/2:
+    if np.min(reslist) < allres/2:
         xmin = np.argmin(reslist)
         m1mean = np.mean(mlist1[:xmin+1])
         m2mean = np.mean(mlist2[xmin:])
         #print(xmin, m1mean, m2mean)
         if m1mean < m2mean:
             print(f"Late germination, day {xmin+3}")
-            return f"Late germination, day {xmin+3}"
+            return ("Late germination", xmin+3, bplots[xmin])
         else:
             #ipdb.set_trace()
             if np.min(idata) == 0:
                 print(f"Detection error, day {xmin+3}")
-                return f"Detection error, day {xmin+3}"
+                return ("Detection error", xmin+3, allplot)
             else:
                 print(f"Stopped growing, day {xmin+3}")
-                return f"Stopped growing, day {xmin+3}"
+                return ("Stopped growing", xmin+3, bplots[xmin])
     else:
         if np.max(idata) < 50:
             print(f"Not growing")
-            return "Not growing"
+            return ("Not growing", None, allplot)
         else:
             print(f"Normal growth")
-            return "Normal growth"
-    #linplot([[x, data, m, c]])
+            return ("Normal growth", allm, allplot)
     #ipdb.set_trace()
     #pass
 
@@ -353,6 +355,16 @@ def linplot(pdata):
     plt.show()
 
 
+def linplotarray(pdata):
+    for (x, data, m, c) in pdata:
+        _ = plt.plot(x, data, 'o', label='Original data', markersize=10)
+        _ = plt.plot(x, m*x + c, 'r', label='Fitted line')
+    canvas = plt.gca().figure.canvas
+    canvas.draw()
+    data = np.frombuffer(canvas.tostring_rgb(), dtype=np.uint8)
+    image = data.reshape(canvas.get_width_height()[::-1] + (3,))
+    return image
+
 def procplant(plates, plantnum, seedmask):
     gmasks=[seedmask]
     # dilate for the cases when the seed moves a bit prior to germination
@@ -360,7 +372,6 @@ def procplant(plates, plantnum, seedmask):
     # Example: seed 14 in apogwas2/021  np.ones((29,29)
     prevmask = ndi.binary_dilation(seedmask, np.ones((29,29)))
     prevmasksum = seedmask.sum()
-    return_state = ""
     for plnum in range(1,len(plates)):
         plate = plates[plnum]
         gplate = cv2.cvtColor(plate, cv2.COLOR_RGB2GRAY)
@@ -382,11 +393,8 @@ def procplant(plates, plantnum, seedmask):
         pass
     maskheight = [np.nonzero(m)[0].max() - np.nonzero(m)[0].min() if m.max() > 0 else 0 for m in gmasks]
     print(maskheight)
-    if not return_state:
-        return_state = classifyGrowth(maskheight)
-
     #ipdb.set_trace()
-    return np.array(gmasks).astype(np.uint8), return_state
+    return np.array(gmasks).astype(np.uint8), classifyGrowth(maskheight)
    
 desc="segment individual plants in plate data"
 dirName="."
@@ -492,28 +500,35 @@ def main():
             #ipdb.set_trace()
             pnum = int(re.findall(r"plant-[0-9]*-([0-9]*)",plantname.split("/")[-1])[0])
             masks, return_state = procplant(plant, pnum, seedsmask[uly:lry,ulx:lrx][...,0] == 0)
-            #ipdb.set_trace()
+
+            # save masks file
             with TiffWriter(plantname.replace("plant-","pmask-")) as tif:
                tif.save(masks,compress=5)
 
-            #rslt = evaluate_masks(masks)
-            #plantmasks[...,uly:lry,ulx:lrx] += 255*masks
+            #update plantoverview and plantmasks buffers
             plantmasks[...,uly:lry,ulx:lrx] = np.maximum(plantmasks[...,uly:lry,ulx:lrx], 255*masks)
             #plantoverview[uly:lry,ulx:lrx,...] = phlib.img3overlay(plant.max(axis=0), masks.max(axis=0))
             plantoverview[uly:lry,ulx:lrx,...] = np.maximum(plantoverview[uly:lry,ulx:lrx,...], phlib.img3overlay(plant.max(axis=0), masks.max(axis=0)))
-            #ipdb.set_trace()
-            if "Detection error" in return_state: hcolor = (255,0,0)
+            # draw color marks 
+            if "Detection error" in return_state[0]: 
+                hcolor = (255,0,0)
             #elif "Normal growth" in return_state: hcolor = (0,255,0)
-            elif "Not growing" in return_state: hcolor = (255,255,0)
-            elif "Stopped growing" in return_state: hcolor = (0, 0, 255)
-            elif "Late germination" in return_state: hcolor = (0, 255, 0)
+            elif "Not growing" in return_state[0]: 
+                hcolor = (255,255,0)
+            elif "Stopped growing" in return_state[0]: 
+                hcolor = (0, 0, 255)
+            elif "Late germination" in return_state[0]: 
+                hcolor = (0, 255, 0)
 
-            if not "Normal growth" in return_state:  
+            if not "Normal growth" in return_state[0]:  
                 plantoverview[uly:uly+20,ulx:lrx,...] = hcolor
                 plantoverview[lry-20:lry,ulx:lrx,...] = hcolor
-                #plantoverview[uly:uly+30,ulx:lrx,...] = 128+(128*np.array(rslt)).astype(np.int)
-                #ipdb.set_trace()
+
+            # create report
+            #return_state = (type, break point/growth rate, growth plot)
+            #ipdb.set_trace()
             pass
+
 
         #ipdb.set_trace()
         with TiffWriter(plantmasks_name) as tif:
