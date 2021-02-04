@@ -4,27 +4,97 @@
 # Licensed under the GNU LGPL v3 - http://www.gnu.org/licenses/gpl.html
 # - or any later version.
 
+import matplotlib
+matplotlib.use('Qt5Agg')
+import matplotlib.pyplot as plt
+
 import SimpleITK as sitk
 import numpy as np
-import cv2
+import cv2, ipdb
 from scipy.sparse import csr_matrix
+import scipy.ndimage as ndi
 
 def plot(data):
-    import matplotlib.pyplot as plt
     # data is tuple of lists
     for d in data:
         plt.plot(range(len(d)),d)
     #plt.pause(1)
     plt.show(block=True)
 
+# display image; if 3D concatenate to one 2D image 
 def disp(iimg, label = None, gray=False):
-    #import guiqwt.pyplot as plt
-    import matplotlib.pyplot as plt
-    plt.ioff()
-    #plt.imshow(iimg, interpolation='none')
-    plt.imshow(iimg)
+    if isinstance(iimg, list):
+        plt.imshow(np.concatenate(iimg,axis=1))
+    else:
+        shape = iimg.shape
+        if len(shape) == 2:
+            plt.imshow(iimg)
+        elif len(shape) > 3:
+            plt.imshow(np.concatenate(iimg,axis=1))
+        elif len(shape) == 3 and shape [2] == 3:
+            plt.imshow(iimg)
+        elif len(shape) == 3 and shape [2] != 3:
+            plt.imshow(np.concatenate(iimg,axis=1))
     #plt.pause(1)
     plt.show(block=True)
+
+def rolling_ball_filter(iimg, sub, ball_radius, top=False):
+    """Rolling ball filter implemented with morphology operations """
+    se  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(2*ball_radius,2*ball_radius))
+    img = iimg.copy()
+    if img.ndim == 3:
+        img=img[::sub,::sub,:]
+        for b in range(3):
+            iband = img[:,:,b]
+            if not top:
+                iband = ndi.grey_erosion(iband, structure=se)
+                img[:,:,b] = ndi.grey_dilation(iband, structure=se)
+            else:
+                iband = ndi.grey_dilation(iband, structure=se)
+                img[:,:,b] = ndi.grey_erosion(iband, structure=se)
+        return ndi.zoom(img, (sub,sub,1), order=1) [:iimg.shape[0],:iimg.shape[1],:]
+    else:
+        img=img[::sub,::sub]
+        if not top:
+            img = ndi.grey_erosion(img, structure=se)
+            img = ndi.grey_dilation(img, structure=se)
+        else:
+            img = ndi.grey_dilation(img, structure=se)
+            img = ndi.grey_erosion(img, structure=se)
+        return ndi.zoom(img, (sub,sub), order=1)[:iimg.shape[0],:iimg.shape[1]] 
+
+def img3mask(img, mask):
+    if len(img) != len(mask):
+        print("incorrect dimensions")
+        return
+    img=img.copy()
+    # gray image
+    if img.ndim == 2:
+        img = (mask>0)*img
+    #gray volume
+    elif img.ndim == 3 and img.shape[-1] > 3:
+        for n in img.shape[0]:
+            img[n] = (mask[n]>0)*img[n] 
+    # color image
+    elif img.ndim == 3 and img.shape[-1] == 3:
+        img[:,:,0] = (mask>0)*img[:,:,0] 
+        img[:,:,1] = (mask>0)*img[:,:,1] 
+        img[:,:,2] = (mask>0)*img[:,:,2] 
+    # color volume
+    else:
+        for n in img.shape[0]:
+            img[n, :,:,0] = (mask[n]>0)*img[n, :,:,0] 
+            img[n, :,:,1] = (mask[n]>0)*img[n, :,:,1] 
+            img[n, :,:,2] = (mask[n]>0)*img[n, :,:,2] 
+
+    return img
+
+def img3overlay(img, mask):
+    size = 1+2*int(1+max(mask.shape)/400)
+    mask = (mask + ndi.binary_dilation(mask, np.ones((size,size))))==1
+    nz = mask.nonzero()
+    img[:,:,1][nz]=150
+    return img
 
 def toitk(image):
     """
