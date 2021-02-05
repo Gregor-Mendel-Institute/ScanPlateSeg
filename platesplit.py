@@ -102,9 +102,11 @@ def procPlateSet(dirname, sid, plates, seeds, rWidth):
    
 desc="segment individual plants in plate data"
 dirName="."
+dirName="/media/milos/SAN128/data/Patrick/batch1/apogwas2/"
 dishId=None
 subStart=0
 rWidth = 120
+rebuildAll = False
 
 def usage(desc):
     global dirName, dishId, rWidth
@@ -116,11 +118,12 @@ def usage(desc):
     print("\t-p subdir_name ... process subdirectory with plant data (all subdirs)")
     print("\t-s INT ........... subdirectory number to start from (all subdirs)")
     print("\t-w INT ........... region width in %% of interseed distance (%d %%)"%rWidth)
+    print("\t-r ............... rebuild all")
 
 def parsecmd(desc):
-    global dirName, dishId, subStart, rWidth
+    global dirName, dishId, subStart, rWidth, rebuildAll
     try:
-        opts, Names = getopt.getopt(sys.argv[1:], "hd:s:p:", ["help"])
+        opts, Names = getopt.getopt(sys.argv[1:], "hrd:s:p:w:", ["help"])
     except getopt.GetoptError as err:
         # print help information and exit:
         print(str(err)) # will print something like "option -a not recognized"
@@ -137,6 +140,8 @@ def parsecmd(desc):
             subStart = int(a)
         elif o in ("-w"):
             rWidth = int(a)
+        elif o in ("-r"):
+            rebuildAll=True
 
 def main():
     global dirName, dishId
@@ -144,17 +149,33 @@ def main():
 
     if dishId:
         print("%s/%s"%(dirName,dishId))
-        seeds = loadTiff( "%s/%s/seeds-mask-%s.tif"%(dirName,dishId,dishId))
+        # delete existing plant files
+        if rebuildAll:
+            fnames = glob.glob("%s/%s/plant-%s*.tif"%(dirName, dishId,dishId))
+            for fname in fnames: os.remove(fname)
+            fnames = glob.glob("%s/%s/pmask-%s*.tif"%(dirName, dishId,dishId))
+            for fname in fnames: os.remove(fname)
+        seeds = loadTiff("%s/%s/seeds-mask-%s.tif"%(dirName,dishId,dishId))
         mask = seeds[...,0] == 0
         plates = loadTiff("%s/%s/plates-%s.tif"%(dirName,dishId,dishId))
         procPlateSet(dirName, dishId, plates, mask, rWidth)
     else:
         for p in range(subStart, 200):
             dishId = "%03d"%p
+            if rebuildAll:
+                fnames = glob.glob("%s/%s/plant-%s*.tif"%(dirName, dishId,dishId))
+                for fname in fnames: os.remove(fname)
+                fnames = glob.glob("%s/%s/pmask-%s*.tif"%(dirName, dishId,dishId))
+                for fname in fnames: os.remove(fname)
             fnames = glob.glob("%s/%s"%(dirName, dishId))
             if fnames == []: continue   # no such plant
-            fnames = glob.glob("%s/%s/plates.tif"%(dirName, dishId))
-            if fnames: continue # plates.tif exists
+            fnames = glob.glob("%s/%s/plant-%s*.tif"%(dirName, dishId,dishId))
+            print("%s/%s"%(dirName,dishId))
+            if fnames: 
+                print("Skipping %s/%s"%(dirName,dishId))
+                continue # plates.tif exists
+            else:
+                print("Processing %s/%s"%(dirName,dishId))
             #load all plates from a single file
             seeds = loadTiff( "%s/%s/seeds-mask-%s.tif"%(dirName,dishId,dishId))
             mask = seeds[...,0] == 0
