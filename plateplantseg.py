@@ -59,6 +59,13 @@ class ODSWriter:
         self.colStyleImg = Style(name="colStyleImg", family="table-column")
         self.colStyleImg.addElement(TableColumnProperties(columnwidth="200mm"))
         self.doc.automaticstyles.addElement(self.colStyleImg)
+
+
+        self.cellStyle1 = Style(name="cellStyle1",family="table-cell", parentstylename='Standard', displayname="middle")
+        #self.cellStyle1.addElement(ParagraphProperties(textalign="middle"))
+        self.cellStyle1.addElement(TableCellProperties(verticalalign="middle"))
+        self.doc.automaticstyles.addElement(self.cellStyle1)
+
         self.exrow=0
 
         #add columns
@@ -95,15 +102,15 @@ class ODSWriter:
         cells = "ABCDEFGHIJKLM"
         for n in range(len(items)):
             if isinstance(items[n], int):
-                tc = TableCell(valuetype="int", value=str(items[n]))
+                tc = TableCell(valuetype="int", value=str(items[n]), stylename="cellStyle1")
                 p = P(text=items[n])
             elif isinstance(items[n], float):
-                tc = TableCell(valuetype="float", value=str("%4.1f"%items[n]))
+                tc = TableCell(valuetype="float", value=str("%4.1f"%items[n]), stylename="cellStyle1")
                 p = P(text=items[n])
             elif isinstance(items[n], np.ndarray):
-                tc = TableCell() #empty cell
+                tc = TableCell(stylename="cellStyle1")
                 fname = tempfile.mktemp(".png")
-                sf=0.10
+                sf=0.08
                 im = items[n]
                 imageio.imwrite(fname, items[n])
                 f = draw.Frame(endcelladdress="import.%s%d"%(cells[n],self.exrow),endx="%dmm"%int(sf*im.shape[1]), endy="%dmm"%int(sf*im.shape[0]))
@@ -114,7 +121,7 @@ class ODSWriter:
                 p = P(text="")
                 i.addElement(p)
             else:
-                tc = TableCell() #empty cell
+                tc = TableCell(stylename="cellStyle1") #empty cell
                 p = P(text=items[n])
             tc.addElement(p)
             tr.addElement(tc)
@@ -407,9 +414,9 @@ def classifyGrowth(idata):
     # find a piecewise linear model with lowest residuals
     # split data in two parts and fit linear models to them
     bplots=[]
-    for bp in range(3, len(idata)-2, 1):
+    for bp in range(2, len(idata)-2, 1):
         x1, data1, m1, c1, res1 = linfit(ix[:bp], idata[:bp])
-        x2, data2, m2, c2, res2 = linfit(ix[bp:], idata[bp:])
+        x2, data2, m2, c2, res2 = linfit(ix[bp-1:], idata[bp-1:])
         #ipdb.set_trace()
         #linplot([ [x1, data1, m1, c1], [x2, data2, m2, c2] ])
         bplots.append(linplotarray([ [x1, data1, m1, c1], [x2, data2, m2, c2] ]))
@@ -420,22 +427,25 @@ def classifyGrowth(idata):
         mlist1.append(m1)
         mlist2.append(m2)
 
-    if np.min(reslist) < NormalGrowthFactor* allres:
+    if np.min(idata) == 0 or np.min(reslist) < NormalGrowthFactor*allres:
         xmin = np.argmin(reslist)
         m1mean = np.mean(mlist1[:xmin+1])
         m2mean = np.mean(mlist2[xmin:])
         #print(xmin, m1mean, m2mean)
         if m1mean < m2mean:
-            print(f"Late germination, day {xmin+3}")
-            return ("Late germination", xmin+3, bplots[xmin])
+            print(f"Late germination, day {xmin+2}")
+            return ("Late germination", xmin+2, bplots[xmin])
         else:
             #ipdb.set_trace()
             if np.min(idata) == 0:
-                print(f"Detection error, day {xmin+3}")
-                return ("Detection error", xmin+3, allplot)
+                print(f"Detection error, day {xmin+2}")
+                return ("Detection error", xmin+2, bplots[xmin])
+            elif m2mean < 3:
+                print(f"Stopped growing, day {xmin+2}")
+                return ("Stopped growing", xmin+2, bplots[xmin])
             else:
-                print(f"Stopped growing, day {xmin+3}")
-                return ("Stopped growing", xmin+3, bplots[xmin])
+                print(f"Normal growth, day {xmin+2}")
+                return (f"Normal growth from day {xmin+2}", m2mean, bplots[xmin])
     else:
         if np.max(idata) < NotGrowingSizeThreshold:
             print(f"Not growing")
@@ -447,11 +457,17 @@ def classifyGrowth(idata):
     #pass
 
 def linfit(x, data):
-    A = np.vstack([x, np.ones(len(x))]).T
-    (m, c), res = np.linalg.lstsq(A, data, rcond=None)[:2]
-    return x, data, m, c, np.sqrt(res[0])
+    if len(x) == 2:
+        m = (data[1]-data[0])/(x[1]-x[0])
+        c = ((data[1]+data[0])-m*(x[1]+x[0]))/2
+        return x, data, m, c, 0
+    else:
+        A = np.vstack([x, np.ones(len(x))]).T
+        (m, c), res = np.linalg.lstsq(A, data, rcond=None)[:2]
+        return x, data, m, c, np.sqrt(res[0])
 
 def linplot(pdata):
+    plt.clf()
     #pdata; [[x, data, m, c], [...], ...)
     for (x, data, m, c) in pdata:
         _ = plt.plot(x, data, 'o', label='Original data', markersize=10)
@@ -624,17 +640,17 @@ def main():
             oplant = phlib.img3overlay(cplant, cmasks)
             #ipdb.set_trace()
             if "Detection error" in return_state[0]: 
-                reportRow = [str(pnum), return_state[0], "", return_state[1]]
+                reportRow = [str(pnum), return_state[0], "", return_state[1], return_state[-1], oplant]
                 hcolor = (255,0,0)
             #elif "Normal growth" in return_state: hcolor = (0,255,0)
             elif "Not growing" in return_state[0]: 
-                reportRow = [str(pnum), return_state[0], "", ""] 
+                reportRow = [str(pnum), return_state[0], "", "", return_state[-1], oplant]
                 hcolor = (255,255,0)
             elif "Stopped growing" in return_state[0]: 
-                reportRow = [str(pnum), return_state[0], "", return_state[1]]
+                reportRow = [str(pnum), return_state[0], "", return_state[1], return_state[-1], oplant] 
                 hcolor = (0, 0, 255)
             elif "Late germination" in return_state[0]: 
-                reportRow = [str(pnum), return_state[0], "", return_state[1]] 
+                reportRow = [str(pnum), return_state[0], "", return_state[1], return_state[-1], oplant]
                 hcolor = (0, 255, 0)
             elif "Normal growth" in return_state[0]: 
                 reportRow = [str(pnum), return_state[0], return_state[1], "", return_state[-1], oplant] 
