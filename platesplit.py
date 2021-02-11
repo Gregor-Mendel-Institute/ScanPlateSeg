@@ -7,38 +7,12 @@
 # - or any later version.
 
 from tifffile import TiffWriter, TiffFile
-import SimpleITK as sitk
 import numpy as np
 import sys, glob, re, os, getopt, csv
 import ipdb
-import phlib
-from skimage import morphology, filters
-from skimage import measure
+from phlib import disp
 import cv2, imageio
-import numpy as np
-import scipy.ndimage as ndi
-import scipy.stats as stats
-from scipy.signal import medfilt
-#import guiqwt.pyplot as plt
-import matplotlib.pyplot as plt
 
-def plot(data):
-    import matplotlib.pyplot as plt
-    # data is tuple of lists
-    for d in data:
-        plt.plot(range(len(d)),d)
-    plt.pause(1)
-    plt.show(block=True)
-
-def disp(iimg, label = None, gray=False):
-    #import guiqwt.pyplot as plt
-    import matplotlib.pyplot as plt
-    plt.ioff()
-    #plt.imshow(iimg, interpolation='none')
-    plt.imshow(iimg)
-    plt.pause(1)
-    plt.show(block=True)
- 
 def loadTiff(ifile):
     try:
         with TiffFile(str(ifile)) as tfile:
