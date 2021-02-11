@@ -48,47 +48,57 @@ class ODSWriter:
         self.itemRowStyle3.addElement(TableRowProperties(rowheight="30mm"))
         self.doc.automaticstyles.addElement(self.itemRowStyle3)
 
-        self.colStyle1 = Style(name="colStyle1", family="table-column")
-        self.colStyle1.addElement(TableColumnProperties(columnwidth="30mm"))
-        self.doc.automaticstyles.addElement(self.colStyle1)
+        self.colStyle30 = Style(name="colStyle30", family="table-column")
+        self.colStyle30.addElement(TableColumnProperties(columnwidth="30mm"))
+        self.doc.automaticstyles.addElement(self.colStyle30)
 
-        self.colStylePlot = Style(name="colStylePlot", family="table-column")
-        self.colStylePlot.addElement(TableColumnProperties(columnwidth="40mm"))
-        self.doc.automaticstyles.addElement(self.colStylePlot)
+        self.colStyle40 = Style(name="colStyle40", family="table-column")
+        self.colStyle40.addElement(TableColumnProperties(columnwidth="40mm"))
+        self.doc.automaticstyles.addElement(self.colStyle40)
 
-        self.colStyleImg = Style(name="colStyleImg", family="table-column")
-        self.colStyleImg.addElement(TableColumnProperties(columnwidth="200mm"))
-        self.doc.automaticstyles.addElement(self.colStyleImg)
+        self.colStyle50 = Style(name="colStyle50", family="table-column")
+        self.colStyle50.addElement(TableColumnProperties(columnwidth="50mm"))
+        self.doc.automaticstyles.addElement(self.colStyle50)
+
+        self.colStyle200 = Style(name="colStyle200", family="table-column")
+        self.colStyle200.addElement(TableColumnProperties(columnwidth="200mm"))
+        self.doc.automaticstyles.addElement(self.colStyle200)
 
 
         self.cellStyle1 = Style(name="cellStyle1",family="table-cell", parentstylename='Standard', displayname="middle")
-        #self.cellStyle1.addElement(ParagraphProperties(textalign="middle"))
+        self.cellStyle1.addElement(ParagraphProperties(textalign="center"))
         self.cellStyle1.addElement(TableCellProperties(verticalalign="middle"))
         self.doc.automaticstyles.addElement(self.cellStyle1)
+
+        self.hdrStyle = Style(name="hdrStyle",family="table-cell", parentstylename='Standard', displayname="middle")
+        self.hdrStyle.addElement(ParagraphProperties(textalign="center"))
+        self.hdrStyle.addElement(TextProperties(fontweight="bold"))
+        self.hdrStyle.addElement(TableCellProperties(verticalalign="middle"))
+        self.doc.automaticstyles.addElement(self.hdrStyle)
 
         self.exrow=0
 
         #add columns
-        tcol = TableColumn(stylename=self.colStyle1)
+        tcol = TableColumn(stylename=self.colStyle30)
         self.table.addElement(tcol)
-        tcol = TableColumn(stylename=self.colStyle1)
+        tcol = TableColumn(stylename=self.colStyle50)
         self.table.addElement(tcol)
-        tcol = TableColumn(stylename=self.colStyle1)
+        tcol = TableColumn(stylename=self.colStyle30)
         self.table.addElement(tcol)
-        tcol = TableColumn(stylename=self.colStyle1)
+        tcol = TableColumn(stylename=self.colStyle30)
         self.table.addElement(tcol)
-        tcol = TableColumn(stylename=self.colStylePlot)
+        tcol = TableColumn(stylename=self.colStyle40)
         self.table.addElement(tcol)
-        tcol = TableColumn(stylename=self.colStyleImg)
+        tcol = TableColumn(stylename=self.colStyle200)
         self.table.addElement(tcol)
 
         self.writehdr(hdr)
 
     def writehdr(self, items): 
         self.exrow += 1
-        tr = TableRow(stylename=self.itemRowStyle1)
+        tr = TableRow()
         for item in items:
-            tc = TableCell() #empty cell
+            tc = TableCell(stylename="hdrStyle") #empty cell
             tr.addElement(tc)
             p = P(text=item)
             tc.addElement(p)
@@ -101,8 +111,8 @@ class ODSWriter:
         tr = TableRow(stylename=self.itemRowStyle3)
         cells = "ABCDEFGHIJKLM"
         for n in range(len(items)):
-            if isinstance(items[n], int):
-                tc = TableCell(valuetype="int", value=str(items[n]), stylename="cellStyle1")
+            if isinstance(items[n], (int, np.int64)):
+                tc = TableCell(valuetype="float", value=str(items[n]), stylename="cellStyle1")
                 p = P(text=items[n])
             elif isinstance(items[n], float):
                 tc = TableCell(valuetype="float", value=str("%4.1f"%items[n]), stylename="cellStyle1")
@@ -129,7 +139,6 @@ class ODSWriter:
         return
 
     def save(self, ofname):
-        print("%s: %d hesiel"%(ofname,self.exrow-1))
         self.doc.save(ofname)
 
 def img3mask(img, mask):
@@ -398,64 +407,68 @@ def fix_border_plant(gmask, prevmask):
     return omask
 
 # classify plant growth using a piecewise linear model
-def classifyGrowth(idata):
+def classifyGrowth(plant_heights):
     # free parameters
-    NormalGrowthFactor = 1./3.
+    NormalGrowthFactor = 0.8
     NotGrowingSizeThreshold = 50
+    NotGrowingSpeedThresh = 10  #distinguish between growing and not growing plant
 
-    ix = np.array(range(len(idata)))
+    ix = np.array(range(len(plant_heights)))
     # fit linear model to all
-    x, data, allm, c, allres = linfit(ix, idata)
-    allplot = linplotarray([[x, data, allm, allres]])
+    x, data, slope_all, intercept_all, allres = linfit(ix, plant_heights)
+    allplot = linplotarray([[x, data, slope_all, intercept_all]])
     #print(0,allres)
     reslist=[]
-    mlist1=[]
-    mlist2=[]
+    slopes1=[]
+    slopes2=[]
     # find a piecewise linear model with lowest residuals
-    # split data in two parts and fit linear models to them
+    # split data in two parts 1 and 2 and fit linear models to them
     bplots=[]
-    for bp in range(2, len(idata)-2, 1):
-        x1, data1, m1, c1, res1 = linfit(ix[:bp], idata[:bp])
-        x2, data2, m2, c2, res2 = linfit(ix[bp-1:], idata[bp-1:])
+    for bp in range(2, len(plant_heights)-2, 1):
+        x1, data1, slope1, intercept1, res1 = linfit(ix[:bp], plant_heights[:bp])
+        x2, data2, slope2, intercept2, res2 = linfit(ix[bp-1:], plant_heights[bp-1:])
         #ipdb.set_trace()
-        #linplot([ [x1, data1, m1, c1], [x2, data2, m2, c2] ])
-        bplots.append(linplotarray([ [x1, data1, m1, c1], [x2, data2, m2, c2] ]))
+        #linplot([ [x1, data1, slope1, c1], [x2, data2, slope2, c2] ])
+        bplots.append(linplotarray([ [x1, data1, slope1, intercept1], [x2, data2, slope2, intercept2] ]))
         #print(bp,res1+res2)
         # estimate residuals as sum of partial residuals 
         reslist.append(res1+res2)
         # used to classify growth type
-        mlist1.append(m1)
-        mlist2.append(m2)
+        slopes1.append(slope1)
+        slopes2.append(slope2)
 
-    if np.min(idata) == 0 or np.min(reslist) < NormalGrowthFactor*allres:
+
+    #ipdb.set_trace()
+    if np.max(plant_heights) < NotGrowingSizeThreshold:
+        print(f"Not growing")
+        return ["Not growing", None, None, allplot]
+    elif np.min(plant_heights) == 0 or slope_all < 0:
+        print(f"Detection error")
+        return ["Detection error", 0, 0, allplot]
+    elif np.min(reslist) < NormalGrowthFactor*allres:
         xmin = np.argmin(reslist)
-        m1mean = np.mean(mlist1[:xmin+1])
-        m2mean = np.mean(mlist2[xmin:])
-        #print(xmin, m1mean, m2mean)
-        if m1mean < m2mean:
-            print(f"Late germination, day {xmin+2}")
-            return ("Late germination", xmin+2, bplots[xmin])
+        slopes1mean = np.mean(slopes1[:xmin+1])
+        slopes2mean = np.mean(slopes2[xmin:])
+        #print(xmin, slopes1mean, slopes2mean)
+        #if slopes1mean < slopes2mean:
+        if slopes1mean < NotGrowingSpeedThresh:
+            print(f"Late germination, day {xmin+1}")
+            return ["Late germination", slopes2mean, xmin+1, bplots[xmin]]
         else:
             #ipdb.set_trace()
-            if np.min(idata) == 0:
-                print(f"Detection error, day {xmin+2}")
-                return ("Detection error", xmin+2, bplots[xmin])
-            elif m2mean < 3:
-                print(f"Stopped growing, day {xmin+2}")
-                return ("Stopped growing", xmin+2, bplots[xmin])
+            if slopes2mean < NotGrowingSpeedThresh:
+                print(f"Stopped growing, day {xmin+1}")
+                return ["Stopped growing", slopes2mean, xmin+1, bplots[xmin]]
+            elif slopes2mean < slopes1mean:
+                print(f"Normal growth, slowdown, day {xmin+1}")
+                return ["Normal growth, slowdown", slopes2mean, xmin+1, bplots[xmin]]
             else:
-                print(f"Normal growth, day {xmin+2}")
-                return (f"Normal growth from day {xmin+2}", m2mean, bplots[xmin])
+                print(f"Normal growth, acceleration, day {xmin+1}")
+                return ["Normal growth, acceleration", slopes2mean, xmin+1, bplots[xmin]]
     else:
-        if np.max(idata) < NotGrowingSizeThreshold:
-            print(f"Not growing")
-            return ("Not growing", None, allplot)
-        else:
-            print(f"Normal growth")
-            return ("Normal growth", allm, allplot)
-    #ipdb.set_trace()
+        print(f"Normal growth, regular")
+        return ["Normal growth, regular", slope_all, 0, allplot]
     #pass
-
 def linfit(x, data):
     if len(x) == 2:
         m = (data[1]-data[0])/(x[1]-x[0])
@@ -477,6 +490,8 @@ def linplot(pdata):
 
 def linplotarray(pdata):
     plt.clf()
+    ymax = np.max([np.max(pd[1]) for pd in pdata]) 
+    plt.ylim(0, 1.1*ymax)
     for (x, data, m, c) in pdata:
         _ = plt.plot(x, data, 'o', label='Original data', markersize=10)
         _ = plt.plot(x, m*x + c, 'r', label='Fitted line')
@@ -609,7 +624,7 @@ def main():
             plantoverview=seedsmask.copy()
             plantmasks = np.zeros((11,seedsmask.shape[0],seedsmask.shape[1])).astype(np.uint8)
        
-        reportWriter = ODSWriter(dishId, ["Plant number","Type","Growth rate","Break point", "Growth plot"])
+        reportWriter = ODSWriter(dishId, ["Plant number","Type","Growth rate","From day", "Growth plot","Plant growth, days 0 – 10"])
         #reportWriter.writerow(ilist[0])
 
         for plantname in plantnames:
@@ -640,21 +655,16 @@ def main():
             oplant = phlib.img3overlay(cplant, cmasks)
             #ipdb.set_trace()
             if "Detection error" in return_state[0]: 
-                reportRow = [str(pnum), return_state[0], "", return_state[1], return_state[-1], oplant]
                 hcolor = (255,0,0)
             #elif "Normal growth" in return_state: hcolor = (0,255,0)
             elif "Not growing" in return_state[0]: 
-                reportRow = [str(pnum), return_state[0], "", "", return_state[-1], oplant]
                 hcolor = (255,255,0)
             elif "Stopped growing" in return_state[0]: 
-                reportRow = [str(pnum), return_state[0], "", return_state[1], return_state[-1], oplant] 
                 hcolor = (0, 0, 255)
             elif "Late germination" in return_state[0]: 
-                reportRow = [str(pnum), return_state[0], "", return_state[1], return_state[-1], oplant]
                 hcolor = (0, 255, 0)
-            elif "Normal growth" in return_state[0]: 
-                reportRow = [str(pnum), return_state[0], return_state[1], "", return_state[-1], oplant] 
-            reportWriter.writerow(reportRow)
+
+            reportWriter.writerow([pnum]+return_state+[oplant])
 
             if not "Normal growth" in return_state[0]:  
                 plantoverview[uly:uly+20,ulx:lrx,...] = hcolor
@@ -666,7 +676,7 @@ def main():
             pass
 
 
-        reportWriter.save("%s/%s/plant_report.ods"%(dirName,dishId))
+        reportWriter.save("%s/%s/plant_report-%s.ods"%(dirName,dishId,dishId))
         #ipdb.set_trace()
         with TiffWriter(plantmasks_name) as tif:
             tif.save(plantmasks,compress=5)
