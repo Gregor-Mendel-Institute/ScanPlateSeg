@@ -413,6 +413,9 @@ def classifyGrowth(box_height, plant_heights):
     NotGrowingSizeThreshold = 50
     NotGrowingSpeedThresh = 10  #distinguish between growing and not growing plant
 
+    # remove outliers
+    plant_heights = ndi.median_filter(plant_heights, size=3)
+
     ix = np.array(range(len(plant_heights)))
     # fit linear model to all
     x, data, slope_all, intercept_all, allres = linfit(ix, plant_heights)
