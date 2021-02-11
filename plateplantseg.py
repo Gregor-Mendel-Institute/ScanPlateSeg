@@ -407,7 +407,7 @@ def fix_border_plant(gmask, prevmask):
     return omask
 
 # classify plant growth using a piecewise linear model
-def classifyGrowth(plant_heights):
+def classifyGrowth(box_height, plant_heights):
     # free parameters
     NormalGrowthFactor = 0.8
     NotGrowingSizeThreshold = 50
@@ -443,8 +443,11 @@ def classifyGrowth(plant_heights):
         print(f"Not growing")
         return ["Not growing", None, None, allplot]
     elif np.min(plant_heights) == 0 or slope_all < 0:
-        print(f"Detection error")
-        return ["Detection error", 0, 0, allplot]
+        print(f"Detection error (vanished)" )
+        return ["Detection error (vanished)" , 0, 0, allplot]
+    elif np.max(plant_heights) > 0.95* box_height:
+        print(f"Detection error (too large)" )
+        return ["Detection error (too large)" , 0, 0, allplot]
     elif np.min(reslist) < NormalGrowthFactor*allres:
         xmin = np.argmin(reslist)
         slopes1mean = np.mean(slopes1[:xmin+1])
@@ -466,8 +469,12 @@ def classifyGrowth(plant_heights):
                 print(f"Normal growth, acceleration, day {xmin+1}")
                 return ["Normal growth, acceleration", slopes2mean, xmin+1, bplots[xmin]]
     else:
-        print(f"Normal growth, regular")
-        return ["Normal growth, regular", slope_all, 0, allplot]
+        if slope_all < NotGrowingSpeedThresh:
+            print(f"Stopped growing")
+            return ["Stopped growing", slope_all, 1, bplots[xmin]]
+        else:
+            print(f"Normal growth, regular")
+            return ["Normal growth, regular", slope_all, 0, allplot]
     #pass
 def linfit(x, data):
     if len(x) == 2:
@@ -530,7 +537,7 @@ def procplant(plates, plantnum, seedmask):
     maskheight = [np.nonzero(m)[0].max() - np.nonzero(m)[0].min() if m.max() > 0 else 0 for m in gmasks]
     print(maskheight)
     #ipdb.set_trace()
-    return np.array(gmasks).astype(np.uint8), classifyGrowth(maskheight)
+    return np.array(gmasks).astype(np.uint8), classifyGrowth(plates.shape[1], maskheight)
    
 desc="segment individual plants in plate data"
 dirName="."
@@ -676,7 +683,7 @@ def main():
             pass
 
 
-        reportWriter.save("%s/%s/plant_report-%s.ods"%(dirName,dishId,dishId))
+        reportWriter.save("%s/%s/plant-report-%s.ods"%(dirName,dishId,dishId))
         #ipdb.set_trace()
         with TiffWriter(plantmasks_name) as tif:
             tif.save(plantmasks,compress=5)
