@@ -290,7 +290,6 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
             # if gmask height increases too much, we have the border problem. So fix it
             gmaskheight = np.nonzero(gmask)[0].max() - np.nonzero(gmask)[0].min()
             pmaskheight = np.nonzero(prevmask)[0].max() - np.nonzero(prevmask)[0].min()
-            #ipdb.set_trace()
             if gmaskheight > 2* pmaskheight:
                 if plantnum in (0, 12): # left side images
                     print("Plant %2d,%d fix left plant"%(plantnum, platenum))
@@ -345,9 +344,11 @@ def fix_left_plant(gmask, prevmask):
     if not (gmask[0].any() or gmask[-1].any() and gmask[:,0].any()):
         return gmask
     gmask = gmask.astype(np.uint8)
+
     # detect vertical strips as lines to estimate their angle
     lines = cv2.HoughLines(gmask, 1, np.pi / 180, int(gmask.shape[0]/2), None, 0, 0)
-    #cdst = drawHoughLines(gmask, lines)
+    if not lines:
+        return gmask
 
     # convert angles > pi/2 to negative
     angles = [ll[0][1] if ll[0][1] < np.pi/2 else ll[0][1] - np.pi for ll in lines]
@@ -532,8 +533,11 @@ def procplant(plates, plantnum, seedmask):
         rb=phlib.rolling_ball_filter(gplate,4,9)
 
         threshold = 4
-        #ipdb.set_trace()
         gmaskall = (gplate.astype(np.float) - rb) > threshold
+        #ipdb.set_trace()
+        # break thin horizontal structures
+        gmaskall = ndi.binary_opening(gmaskall, np.ones((7,1)))
+
         gmask = select_overlaps(gmaskall, prevmask, plantnum, plnum)
         #ipdb.set_trace()
         gmasks.append(gmask)
@@ -663,7 +667,6 @@ def main():
             plantoverview[uly:lry,ulx:lrx,...] = np.maximum(plantoverview[uly:lry,ulx:lrx,...], phlib.img3overlay(plant.max(axis=0), masks.max(axis=0)))
             # draw color marks 
             cmasks = np.concatenate(masks, axis=1)[::2,::2]
-            ipdb.set_trace()
             nz = np.nonzero(cmasks)
             m_from = max(nz[0].min()-5, 0)
             m_to = min(nz[0].max()+5, cmasks.shape[0])
