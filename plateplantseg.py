@@ -241,6 +241,7 @@ def getLargest (mask):
 def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
     ''' select the region in mask with overlaps in prevmask'''
     minsize = 400   # minimal blob area to not to be regarded as noise (minimal seed size)
+    iters = 15      # number of repetitions in dilation (dilation size iter*7) (required by the plant 013/9)
 
     labels, nlabels = measure.label(mask, return_num=True)
     ovlaps = np.unique(labels*prevmask)[1:] # the first one is background
@@ -253,15 +254,16 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
         sumovlaps += (labels == lbl).sum()
 
     # check in a loop
-    while sumovlaps < minsize: 
-        print(f"Plant {plantnum},{platenum} select_overlaps: dilation of prevmask")
+    while sumovlaps < minsize and iters: 
+        iters -= 1
+        #print(f"Plant {plantnum},{platenum} select_overlaps: dilation of prevmask")
         prevmask = ndi.binary_dilation(prevmask, np.ones((7,1)))
         prevmask = ndi.binary_dilation(prevmask, np.ones((1,7)))
         ovlaps = np.unique(labels*prevmask)[1:] # the first one is background
         sumovlaps=0
         for lbl in ovlaps:
             sumovlaps += (labels == lbl).sum()
-    
+
     #remove regions too small <minsize, a typical seed is > minsize
     # Example:  apogwas2//021,5
     if len(ovlaps) > 1:
@@ -442,12 +444,12 @@ def classifyGrowth(box_height, plant_heights):
 
 
     #ipdb.set_trace()
-    if np.max(plant_heights) < NotGrowingSizeThreshold:
-        print(f"Not growing")
-        return ["Not growing", None, None, allplot]
-    elif np.min(plant_heights) == 0 or slope_all < 0:
+    if np.min(plant_heights) == 0 or slope_all < 0:
         print(f"Detection error (vanished)" )
         return ["Detection error (vanished)" , 0, 0, allplot]
+    elif np.max(plant_heights) < NotGrowingSizeThreshold:
+        print(f"Not growing")
+        return ["Not growing", None, None, allplot]
     elif np.max(plant_heights) > 0.95* box_height:
         print(f"Detection error (too large)" )
         return ["Detection error (too large)" , 0, 0, allplot]
@@ -526,12 +528,14 @@ def procplant(plates, plantnum, seedmask):
         rb=phlib.rolling_ball_filter(gplate,4,9)
 
         threshold = 4
+        #ipdb.set_trace()
         gmaskall = (gplate.astype(np.float) - rb) > threshold
         gmask = select_overlaps(gmaskall, prevmask, plantnum, plnum)
         #ipdb.set_trace()
         gmasks.append(gmask)
         # the plant should normally not shrink, so shrinking is suspicious. Keep the last good mask
         if gmask.sum() < 0.8*prevmasksum:
+            #ipdb.set_trace()
             print("Plant %2d,%d: Plant detection failed"%(plantnum, plnum))
         else:
             prevmask=gmask
@@ -539,7 +543,6 @@ def procplant(plates, plantnum, seedmask):
         pass
     maskheight = [np.nonzero(m)[0].max() - np.nonzero(m)[0].min() if m.max() > 0 else 0 for m in gmasks]
     print(maskheight)
-    #ipdb.set_trace()
     return np.array(gmasks).astype(np.uint8), classifyGrowth(plates.shape[1], maskheight)
    
 desc="segment individual plants in plate data"
