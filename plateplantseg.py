@@ -650,7 +650,6 @@ def main():
             pmaskname = plantname.replace("plant-","pmask-")
             # Reload, if plant mask exists
             print("Processing %s"%pmaskname)
-            #ipdb.set_trace()
             pnum = int(re.findall(r"plant-[0-9]*-([0-9]*)",plantname.split("/")[-1])[0])
             masks, return_state = procplant(plant, pnum, seedsmask[uly:lry,ulx:lrx][...,0] == 0)
 
@@ -664,10 +663,13 @@ def main():
             plantoverview[uly:lry,ulx:lrx,...] = np.maximum(plantoverview[uly:lry,ulx:lrx,...], phlib.img3overlay(plant.max(axis=0), masks.max(axis=0)))
             # draw color marks 
             cmasks = np.concatenate(masks, axis=1)[::2,::2]
+            ipdb.set_trace()
             nz = np.nonzero(cmasks)
-            cmasks = cmasks[nz[0].min()-5 : nz[0].max()+5,:]
+            m_from = max(nz[0].min()-5, 0)
+            m_to = min(nz[0].max()+5, cmasks.shape[0])
+            cmasks = cmasks[m_from:m_to,:]
             cplant = np.concatenate(plant, axis=1)[::2,::2]
-            cplant = cplant[nz[0].min()-5 : nz[0].max()+5,:]
+            cplant = cplant[m_from:m_to,:]
             oplant = phlib.img3overlay(cplant, cmasks)
             #ipdb.set_trace()
             if "Detection error" in return_state[0]: 
