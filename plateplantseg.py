@@ -87,6 +87,8 @@ class ODSWriter:
         self.table.addElement(tcol)
         tcol = TableColumn(stylename=self.colStyle30)
         self.table.addElement(tcol)
+        tcol = TableColumn(stylename=self.colStyle30)
+        self.table.addElement(tcol)
         tcol = TableColumn(stylename=self.colStyle40)
         self.table.addElement(tcol)
         tcol = TableColumn(stylename=self.colStyle200)
@@ -426,7 +428,7 @@ def classifyGrowth(box_height, plant_heights):
     reslist=[]
     slopes1=[]
     slopes2=[]
-    # find a piecewise linear model with lowest residuals
+    # find a piecewise linear model with smallest residuals
     # split data in two parts 1 and 2 and fit linear models to them
     bplots=[]
     for bp in range(2, len(plant_heights)-2, 1):
@@ -443,43 +445,45 @@ def classifyGrowth(box_height, plant_heights):
         slopes2.append(slope2)
 
 
+    print(plant_heights)
     #ipdb.set_trace()
+    xmin = np.argmin(reslist)
+    rmin = min(reslist)
     if np.min(plant_heights) == 0 or slope_all < 0:
         print(f"Detection error (vanished)" )
-        return ["Detection error (vanished)" , 0, 0, allplot]
+        return ["Detection error (vanished)" , None, None, None, allplot]
     elif np.max(plant_heights) < NotGrowingSizeThreshold:
         print(f"Not growing")
-        return ["Not growing", None, None, allplot]
+        return ["Not growing", None, None, None, allplot]
     elif np.max(plant_heights) > 0.95* box_height:
         print(f"Detection error (too large)" )
-        return ["Detection error (too large)" , 0, 0, allplot]
+        return ["Detection error (too large)" , None, None, None, allplot]
     elif np.min(reslist) < NormalGrowthFactor*allres:
-        xmin = np.argmin(reslist)
         slopes1mean = np.mean(slopes1[:xmin+1])
         slopes2mean = np.mean(slopes2[xmin:])
         #print(xmin, slopes1mean, slopes2mean)
         #if slopes1mean < slopes2mean:
         if slopes1mean < NotGrowingSpeedThresh:
             print(f"Late germination, day {xmin+1}")
-            return ["Late germination", slopes2mean, xmin+1, bplots[xmin]]
+            return ["Late germination", slopes2mean, xmin+1, rmin, bplots[xmin]]
         else:
             #ipdb.set_trace()
             if slopes2mean < NotGrowingSpeedThresh:
                 print(f"Stopped growing, day {xmin+1}")
-                return ["Stopped growing", slopes2mean, xmin+1, bplots[xmin]]
+                return ["Stopped growing", slopes2mean, xmin+1, rmin, bplots[xmin]]
             elif slopes2mean < slopes1mean:
                 print(f"Normal growth, slowdown, day {xmin+1}")
-                return ["Normal growth, slowdown", slopes2mean, xmin+1, bplots[xmin]]
+                return ["Normal growth, slowdown", slopes2mean, xmin+1, rmin, bplots[xmin]]
             else:
                 print(f"Normal growth, acceleration, day {xmin+1}")
-                return ["Normal growth, acceleration", slopes2mean, xmin+1, bplots[xmin]]
+                return ["Normal growth, acceleration", slopes2mean, xmin+1, rmin, bplots[xmin]]
     else:
         if slope_all < NotGrowingSpeedThresh:
             print(f"Stopped growing")
-            return ["Stopped growing", slope_all, 1, bplots[xmin]]
+            return ["Stopped growing", slope_all, 1, rmin, bplots[xmin]]
         else:
             print(f"Normal growth, regular")
-            return ["Normal growth, regular", slope_all, 0, allplot]
+            return ["Normal growth, regular", slope_all, 0, rmin, allplot]
     #pass
 def linfit(x, data):
     if len(x) == 2:
@@ -489,7 +493,7 @@ def linfit(x, data):
     else:
         A = np.vstack([x, np.ones(len(x))]).T
         (m, c), res = np.linalg.lstsq(A, data, rcond=None)[:2]
-        return x, data, m, c, np.sqrt(res[0])
+        return x, data, m, c, np.sqrt(res[0]/data.mean())
 
 def linplot(pdata):
     plt.clf()
@@ -542,7 +546,6 @@ def procplant(plates, plantnum, seedmask):
             prevmasksum = prevmask.sum()
         pass
     maskheight = [np.nonzero(m)[0].max() - np.nonzero(m)[0].min() if m.max() > 0 else 0 for m in gmasks]
-    print(maskheight)
     return np.array(gmasks).astype(np.uint8), classifyGrowth(plates.shape[1], maskheight)
    
 desc="segment individual plants in plate data"
@@ -637,7 +640,7 @@ def main():
             plantoverview=seedsmask.copy()
             plantmasks = np.zeros((11,seedsmask.shape[0],seedsmask.shape[1])).astype(np.uint8)
        
-        reportWriter = ODSWriter(dishId, ["Plant number","Type","Growth rate","From day", "Growth plot","Plant growth, days 0 – 10"])
+        reportWriter = ODSWriter(dishId, ["Plant number","Type","Growth rate","From day", "Residuals", "Growth plot","Plant growth, days 0 – 10"])
         #reportWriter.writerow(ilist[0])
 
         for plantname in plantnames:
