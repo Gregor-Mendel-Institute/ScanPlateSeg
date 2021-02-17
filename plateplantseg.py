@@ -543,14 +543,19 @@ def procplant(plates, plantnum, seedmask):
         gmasks.append(gmask)
         # the plant should normally not shrink, so shrinking is suspicious. Keep the last good mask
         if gmask.sum() < 0.8*prevmasksum:
-            #ipdb.set_trace()
             print("Plant %2d,%d: Plant detection failed"%(plantnum, plnum))
         else:
             prevmask=gmask
             prevmasksum = prevmask.sum()
         pass
+    #failure, if the mask touches upper border
+    gmasks = np.array(gmasks).astype(np.uint8)
+    #ipdb.set_trace()
+    if gmasks.max(axis=0)[0,:].any():
+        print(f"Detection error (too large)" )
+        return gmasks, ["Detection error (too large)" , None, None, None, None]
     maskheight = [np.nonzero(m)[0].max() - np.nonzero(m)[0].min() if m.max() > 0 else 0 for m in gmasks]
-    return np.array(gmasks).astype(np.uint8), classifyGrowth(plates.shape[1], maskheight)
+    return gmasks, classifyGrowth(plates.shape[1], maskheight)
    
 desc="segment individual plants in plate data"
 dirName="."
