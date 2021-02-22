@@ -25,7 +25,7 @@ outDirName=None
 dishId=None    # a NNN identifier od a dish
 verbose=False
 rWidth = 120    # % 
-namePrefix=""
+namePrefix="apogwas1"
 
 def loadTiff(ifile):
     try:
@@ -69,13 +69,15 @@ def parsecmd(desc):
         elif o in ("-o"):
             outDirName = a
         elif o in ("-p"):
-            dishId = a
+            dishId = int(a)
         elif o in ("-w"):
             rWidth = int(a)
 
 def procAll(inDirName, outDirName, dishId, prefix):
     global verbose, rWidth
-    reg_file="%s/%s/plant-regions-%s.png"%(outDirName,dishId,dishId)
+    ofpath = f"{outDirName}/{prefix}/{dishId}"
+    #reg_file="%s/plant-regions-%s.png"%(outDirName,dishId,dishId)
+    reg_file="%s/plant-regions-%s.png"%(ofpath,dishId)
     if os.path.isfile(reg_file):
         if verbose:
             print("Skipping dish %s (all done, file %s exists)"%(dishId, reg_file))
@@ -83,23 +85,23 @@ def procAll(inDirName, outDirName, dishId, prefix):
     now = time.strftime("%Y-%b-%d_%H:%M:%S")
     reportLogs = configparser.ConfigParser()
     try:
-        reportLogs.read("%s/%s/plateprocsplit.txt"%(outDirName,dishId))
+        reportLogs.read(f"{ofpath}/plateprocsplit.txt")
     except:
         pass
     if verbose:
-        print("Input directory:  %s"%(inDirName))
-        print("Output directory/set: %s/%s"%(outDirName,dishId))
-        if prefix: print("File name prefix:  %s"%(prefix))
+        print("Input directory:  %s/%s"%(inDirName,prefix))
+        print("Output directory/set: %s"%(ofpath))
 
     # align the dishes, first check if a file with aligned dishes exists
-    plates_file = "%s/%s/plates-%s.tif"%(outDirName,dishId,dishId)
+    plates_file = "%s/plates-%s.tif"%(ofpath,dishId)
     plates = loadTiff(plates_file)
     if plates is None:
         if verbose:
-            print("Detecting and aligning dishes for set %s in %s"%(dishId,inDirName))
+            print("Detecting and aligning dishes for set %s*%s in %s"%(prefix,dishId,inDirName))
+        #ipdb.set_trace()
         plates, reportLog = platealign.procPlateSet(inDirName, outDirName, dishId, prefix)
-        with TiffWriter("%s/%s/plates-%s.tif"%(outDirName, dishId, dishId)) as tif: tif.save(plates)
-        imageio.imwrite("%s/%s/plates-%s.png"%(outDirName, dishId, dishId), plates.max(axis=0)[::4,::4,:])
+        with TiffWriter("%s/plates-%s.tif"%(ofpath, dishId)) as tif: tif.save(plates)
+        imageio.imwrite("%s/plates-%s.png"%(ofpath, dishId), plates.max(axis=0)[::4,::4,:])
     else:
         if verbose:
             print("Reusing aligned plates: %s"%plates_file)
@@ -107,13 +109,14 @@ def procAll(inDirName, outDirName, dishId, prefix):
     reportLogs["platealign %s"%now] = reportLog
 
     # identify seeds, first check if (inverted) file with seed masks exists
-    mask_file = "%s/%s/seeds-mask-%s.tif"%(outDirName,dishId,dishId)
+    mask_file = "%s/seeds-mask-%s.tif"%(ofpath,dishId)
     invmask = loadTiff(mask_file)
     if invmask is None:
         if verbose:
             print("Detecting seeds in %s"%plates_file)
+        #ipdb.set_trace()
         mask, reportLog = platesegseed.procPlateSet(plates)
-        with TiffWriter("%s/%s/seeds-mask-%s.tif"%(outDirName,dishId,dishId)) as tif:
+        with TiffWriter("%s/seeds-mask-%s.tif"%(ofpath,dishId)) as tif:
             tif.save(platesegseed.img3mask(plates[0]+1,1-mask),compress=5)
     else:
         if verbose:
@@ -121,16 +124,17 @@ def procAll(inDirName, outDirName, dishId, prefix):
         mask = invmask[...,0] > 0
         reportLog = ("Reusing seed mask: %s"%mask_file)
     #write in both cases, eventually to reflect manual changes in the seeds-mask file
-    with TiffWriter("%s/%s/seeds-%s.tif"%(outDirName,dishId,dishId)) as tif:
+    with TiffWriter("%s/seeds-%s.tif"%(ofpath,dishId)) as tif:
         tif.save(platesegseed.img3mask(plates[0],mask),compress=5)
 
     #Save regions
     if verbose:
-        print("Saving regions to %s/%s"%(outDirName, dishId))
-    reportLog = platesplit.procPlateSet(outDirName, dishId, plates, mask, rWidth)
+        print("Saving regions to %s/%s/%s"%(outDirName, prefix, dishId))
+    #ipdb.set_trace()
+    reportLog = platesplit.procPlateSet(f"{outDirName}/{prefix}", dishId, plates, mask, rWidth)
     reportLogs["platesplit %s"%now] = reportLog
 
-    with open("%s/%s/plateprocsplit.txt"%(outDirName, dishId), 'w') as reportfile: reportLogs.write(reportfile)
+    with open("%s/plateprocsplit.txt"%(ofpath), 'w') as reportfile: reportLogs.write(reportfile)
 
 def main():
     global inDirName, outDirName, dishId, namePrefix
@@ -138,14 +142,15 @@ def main():
     parsecmd(desc)
     outDirName = outDirName if outDirName else inDirName
 
-    ipdb.set_trace()
-    if dishId:
+    #ipdb.set_trace()
+    if False and dishId:
         procAll(inDirName, outDirName, dishId, namePrefix)
     else:
-        for p in range(200):
+        for p in range(dishId,200):
             dishId = "%03d"%p
             # check if dishId images exist
-            pnames = glob.glob("%s/*%s.tif"%(inDirName, dishId))
+            pnames = glob.glob("%s/%s*%s.tif"%(inDirName, namePrefix,dishId))
+            #ipdb.set_trace()
             if pnames == []: continue   # no such plant
             procAll(inDirName, outDirName, dishId, namePrefix)
 
