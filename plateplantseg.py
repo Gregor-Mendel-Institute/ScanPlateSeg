@@ -347,7 +347,7 @@ def fix_left_plant(gmask, prevmask):
 
     # detect vertical strips as lines to estimate their angle
     lines = cv2.HoughLines(gmask, 1, np.pi / 180, int(gmask.shape[0]/2), None, 0, 0)
-    if not lines:
+    if not lines.any():
         return gmask
 
     # convert angles > pi/2 to negative

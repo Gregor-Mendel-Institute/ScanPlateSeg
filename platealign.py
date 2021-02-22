@@ -276,8 +276,15 @@ def getMaskRotationCont(img):
 def getFilesAndCreateDir(inDirName, outDirName, sid, prefix):
     pattern = "%s/%s*%s.tif"%(inDirName, prefix, sid)
     fnames = glob.glob(pattern)
-    spath = "%s/%s"%(outDirName, sid)
+    spath = f"{outDirName}/{prefix}/{sid}"
     if fnames:
+        ppath = f"{outDirName}/{prefix}" 
+        if not os.path.exists(ppath):
+            try:  
+                os.mkdir(ppath)
+            except OSError:  
+                print ("Creation of the directory %s failed" % ppath)
+
         if  os.path.exists(spath):
             try:  
                 shutil.rmtree(spath)
@@ -310,7 +317,7 @@ def procPlate(n, fname, m0r, sub, bbox):
     platet = transformItk(plate, plate, otrans)
     return (n, cropPlate(img3mask(platet,mt), bbox))
 
-def procPlateSet(inDirName, outDirName, sid, prefix="",sub=4):
+def procPlateSet(inDirName, outDirName, sid, prefix="apogwas1",sub=4):
     global reportLog
     reportLog["Directory Name"] = inDirName
     reportLog["File name prefix"] = prefix
@@ -342,7 +349,7 @@ reportLog={}
 desc="Identify dish and align plates"
 inDirName="."
 outDirName=None
-namePrefix=""
+namePrefix="apogwas1"
 
 dishId=None    # a NNN identifier od a dish
 
