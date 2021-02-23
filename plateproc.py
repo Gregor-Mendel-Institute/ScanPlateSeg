@@ -22,7 +22,7 @@ desc="Identify dish and align plates"
 inDirName="."
 outDirName=None
 
-dishId=None    # a NNN identifier od a dish
+dishId=0    # a NNN identifier od a dish
 verbose=False
 rWidth = 120    # % 
 namePrefix="apogwas1"
@@ -45,7 +45,7 @@ def usage(desc):
     print("\t-d name ..... directory with plant datasets (%s)"%inDirName)
     print("\t-o name ..... directory to store the result to (in a NNN subdirecory) (%s)"%"same as input")
     print("\t-e string ... file name prefix (%s)"%namePrefix)
-    print("\t-p NNN ...... ID of a dish (NNN) to process (all dishes)")
+    print("\t-p NNN ...... ID of a dish (NNN) to start from (all dishes)")
     print("\t-w INT ...... region width in %% of inter seed distance (%d %%)"%rWidth)
 
 def parsecmd(desc):
