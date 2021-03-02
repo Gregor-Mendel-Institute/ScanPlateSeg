@@ -362,6 +362,8 @@ def fix_left_plant(gmask, prevmask):
     # compute foreground pixels in vertical columns, the strips go top to bottom
     gprof=gmask[pmiy:pmay,:].sum(axis=0)
     gprof = gprof > 0.8*(pmay-pmiy)
+    if not gprof.any():
+        return gmask
     cutpos = np.nonzero(gprof)[0].max() # the rightmost value, we hope this is where the plant touches it
     gmask[:,:cutpos] = 0
     # remove noise along the border
@@ -378,7 +380,8 @@ def fix_right_plant(gmask, prevmask):
     gmask = gmask.astype(np.uint8)
     # detect vertical strips as lines to estimate their angle
     lines = cv2.HoughLines(gmask, 1, np.pi / 180, int(gmask.shape[0]/2), None, 0, 0)
-    #cdst = drawHoughLines(gmask, lines)
+    if lines is None:
+        return gmask
 
     # convert angles > pi/2 to negative
     angles = [ll[0][1] if ll[0][1] < np.pi/2 else ll[0][1] - np.pi for ll in lines]
@@ -636,6 +639,9 @@ def main():
     #process dishes one by one
     for dishId in dishFiles:
         seedsmask = loadTiff( "%s/%s/seeds-mask-%s.tif"%(dirName,dishId,dishId))
+        # gimp make this sometimes with alpha channel
+        if seedsmask.shape[-1] == 4:
+            seedsmask = seedsmask[...,:3]
         plantnames = dishFiles[dishId]
         plantmasks_name = "%s/%s/pmask-%s.tif"%(dirName,dishId,dishId)
         plantoverview_name = "%s/%s/pmask-ovl-%s.tif"%(dirName,dishId,dishId)

@@ -330,7 +330,6 @@ def procPlateSet(inDirName, outDirName, sid, prefix="apogwas1",sub=4):
         #with open("%s/%s/result.txt"%(inDirName,sid), 'w') as reportfile: reportLog.write(reportfile)
         return
     #align dish with image borders
-    #ipdb.set_trace()
     rotCenter, rotAngle = getMaskRotationCont(m0)
     M = cv2.getRotationMatrix2D(rotCenter,-rotAngle,1)
     m0r = cv2.warpAffine(m0,M,(m0.shape[1],m0.shape[0]))
@@ -340,7 +339,12 @@ def procPlateSet(inDirName, outDirName, sid, prefix="apogwas1",sub=4):
 
     #for n, fname in enumerate(files[9:]):
     for n, fname in enumerate(files[1:]):
-        plates.append(procPlate(n, fname, m0r, sub, bbox)[1])
+        retval = procPlate(n, fname, m0r, sub, bbox)
+        if retval:
+            plates.append(retval[1])
+        else:
+            print(f"Processing of {fname} failed")
+            sys.exit(1)
     plates = np.array(plates)
     reportLog["End time"] = strftime("%Y-%m-%d %H:%M:%S", gmtime())
     return plates, reportLog
