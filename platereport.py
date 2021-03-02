@@ -25,13 +25,6 @@ import scipy.ndimage as ndi
 #from scipy.signal import medfilt
 #import guiqwt.pyplot as plt
 import matplotlib.pyplot as plt
-from odf.opendocument import OpenDocumentSpreadsheet
-from odf.style import Style, TextProperties, ParagraphProperties, TableColumnProperties, TableCellProperties,TableRowProperties
-from odf.text import P, A
-from odf.table import Table, TableColumn, TableRow, TableCell
-#from odf.draw import Frame, Image
-from odf import draw
-from odf.office import Annotation
 
 import plateplantseg
 reload(plateplantseg)
@@ -47,115 +40,6 @@ def loadCsv(ifile):
             if row[0] == "type": continue
             acc[row[acc_id]].append(row)
     return acc
-
-class ODSWriter:
-
-    def __init__(self, dishId, hdr):
-        self.hdr = hdr
-        self.doc = OpenDocumentSpreadsheet()
-        self.table = Table(name=str(dishId))
-        self.doc.spreadsheet.addElement(self.table)
-        #styles
-        self.itemRowStyle1 = Style(name="itemRowStyle", family="table-row")
-        self.itemRowStyle1.addElement(TableRowProperties(rowheight="10mm"))
-        self.doc.automaticstyles.addElement(self.itemRowStyle1)
-
-        self.itemRowStyle3 = Style(name="itemRowStyle", family="table-row")
-        self.itemRowStyle3.addElement(TableRowProperties(rowheight="30mm"))
-        self.doc.automaticstyles.addElement(self.itemRowStyle3)
-
-        self.colStyle30 = Style(name="colStyle30", family="table-column")
-        self.colStyle30.addElement(TableColumnProperties(columnwidth="30mm"))
-        self.doc.automaticstyles.addElement(self.colStyle30)
-
-        self.colStyle40 = Style(name="colStyle40", family="table-column")
-        self.colStyle40.addElement(TableColumnProperties(columnwidth="40mm"))
-        self.doc.automaticstyles.addElement(self.colStyle40)
-
-        self.colStyle50 = Style(name="colStyle50", family="table-column")
-        self.colStyle50.addElement(TableColumnProperties(columnwidth="50mm"))
-        self.doc.automaticstyles.addElement(self.colStyle50)
-
-        self.colStyle200 = Style(name="colStyle200", family="table-column")
-        self.colStyle200.addElement(TableColumnProperties(columnwidth="200mm"))
-        self.doc.automaticstyles.addElement(self.colStyle200)
-
-
-        self.cellStyle1 = Style(name="cellStyle1",family="table-cell", parentstylename='Standard', displayname="middle")
-        self.cellStyle1.addElement(ParagraphProperties(textalign="center"))
-        self.cellStyle1.addElement(TableCellProperties(verticalalign="middle"))
-        self.doc.automaticstyles.addElement(self.cellStyle1)
-
-        self.hdrStyle = Style(name="hdrStyle",family="table-cell", parentstylename='Standard', displayname="middle")
-        self.hdrStyle.addElement(ParagraphProperties(textalign="center"))
-        self.hdrStyle.addElement(TextProperties(fontweight="bold"))
-        self.hdrStyle.addElement(TableCellProperties(verticalalign="middle"))
-        self.doc.automaticstyles.addElement(self.hdrStyle)
-
-        self.exrow=0
-
-        #add columns
-        tcol = TableColumn(stylename=self.colStyle30)
-        self.table.addElement(tcol)
-        tcol = TableColumn(stylename=self.colStyle50)
-        self.table.addElement(tcol)
-        tcol = TableColumn(stylename=self.colStyle30)
-        self.table.addElement(tcol)
-        tcol = TableColumn(stylename=self.colStyle30)
-        self.table.addElement(tcol)
-        tcol = TableColumn(stylename=self.colStyle40)
-        self.table.addElement(tcol)
-        tcol = TableColumn(stylename=self.colStyle200)
-        self.table.addElement(tcol)
-
-        self.writehdr(hdr)
-
-    def writehdr(self, items): 
-        self.exrow += 1
-        tr = TableRow()
-        for item in items:
-            tc = TableCell(stylename="hdrStyle") #empty cell
-            tr.addElement(tc)
-            p = P(text=item)
-            tc.addElement(p)
-        self.table.addElement(tr)
-        return
-
-    def writerow(self, items): 
-        self.exrow += 1
-            #pass
-        tr = TableRow(stylename=self.itemRowStyle3)
-        cells = "ABCDEFGHIJKLM"
-        for n in range(len(items)):
-            if isinstance(items[n], (int, np.int64)):
-                tc = TableCell(valuetype="float", value=str(items[n]), stylename="cellStyle1")
-                p = P(text=items[n])
-            elif isinstance(items[n], float):
-                tc = TableCell(valuetype="float", value=str("%4.1f"%items[n]), stylename="cellStyle1")
-                p = P(text=items[n])
-            elif isinstance(items[n], np.ndarray):
-                tc = TableCell(stylename="cellStyle1")
-                fname = tempfile.mktemp(".png")
-                sf=0.08
-                im = items[n]
-                imageio.imwrite(fname, items[n])
-                f = draw.Frame(endcelladdress="import.%s%d"%(cells[n],self.exrow),endx="%dmm"%int(sf*im.shape[1]), endy="%dmm"%int(sf*im.shape[0]))
-                tc.addElement(f)
-                href=self.doc.addPicture(fname)
-                i = draw.Image(href=href, type="simple", show="embed", actuate="onLoad")
-                f.addElement(i)
-                p = P(text="")
-                i.addElement(p)
-            else:
-                tc = TableCell(stylename="cellStyle1") #empty cell
-                p = P(text=items[n])
-            tc.addElement(p)
-            tr.addElement(tc)
-        self.table.addElement(tr)
-        return
-
-    def save(self, ofname):
-        self.doc.save(ofname)
 
 def img3mask(img, mask):
     if len(img) != len(mask):
@@ -470,11 +354,12 @@ def procplant(plant_name, mask_name):
     oplant = phlib.img3overlay(cplant, cmasks)
     return return_state+[oplant], maskheight
 
-desc="segment individual plants in plate data"
+desc="Create report for individual accessions as defined by a csv/tsv file"
 dirName="."
 dirName="/media/milos/SAN128/data/Patrick/all/"
 tsvName="apogwas.csv"
 dishId=None
+accIds=[]
 plantNum=None
 subStart=0
 rWidth = 120
@@ -482,18 +367,19 @@ rebuildAll=False
 reportWriter=None
 
 def usage(desc):
-    global dirName, dishId, rWidth
+    global dirName, accIds, rWidth
     print(sys.argv[0]+":",   desc)
     print("Usage: ", sys.argv[0], "[switches]")
     print("Switches:")
     print("\t-h ............... this usage")
     print("\t-d name .......... directory with plant datasets (%s)"%dirName)
+    print("\t-a id,id,......... list aof accession ids, separated by a comma")
     print("\t-r ............... rebuild all")
 
 def parsecmd(desc):
-    global dirName, rebuildAll
+    global dirName, rebuildAll, accIds
     try:
-        opts, Names = getopt.getopt(sys.argv[1:], "hrd:s:p:", ["help"])
+        opts, Names = getopt.getopt(sys.argv[1:], "hrd:s:a:", ["help"])
     except getopt.GetoptError as err:
         # print help information and exit:
         print(str(err)) # will print something like "option -a not recognized"
@@ -504,8 +390,8 @@ def parsecmd(desc):
             sys.exit()
         elif o in ("-d"):
             dirName = a
-        elif o in ("-p"):
-            dishId = a
+        elif o in ("-a"):
+            accIds = a.split(",")
         elif o in ("-s"):
             subStart = int(a)
         elif o in ("-w"):
@@ -514,12 +400,13 @@ def parsecmd(desc):
             rebuildAll=True
 
 def main():
-    global dirName, dishId, rebuildAll, reportWriter
+    global dirName, accIds, rebuildAll, reportWriter
     parsecmd(desc)
 
     accessions = loadCsv(f"{dirName}/{tsvName}")
     for accession in accessions:
         #check first, if all plates exist (important in testing)
+        if not accession in accIds: continue
 
         plant_dirs = {} 
         for acs in accessions[accession]:
@@ -528,6 +415,7 @@ def main():
                 plant_dirs[pdirectory] = acs
             pass
         if plant_dirs and len(plant_dirs) == 8:
+            print(f"Processing accession {accession}") 
             controls=[]
             apos=[]
             for ppd in plant_dirs:
