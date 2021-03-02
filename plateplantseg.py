@@ -123,7 +123,7 @@ class ODSWriter:
                 p = P(text=items[n])
             elif isinstance(items[n], np.ndarray):
                 tc = TableCell(stylename="cellStyle1")
-                fname = tempfile.mktemp(".png")
+                fname = tempfile.mktemp(".jpg")
                 sf=0.08
                 im = items[n]
                 imageio.imwrite(fname, items[n])
