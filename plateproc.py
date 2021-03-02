@@ -10,6 +10,7 @@
 # - or any later version.
 
 from tifffile import TiffWriter, TiffFile
+from importlib import reload  
 import sys, glob, shutil, os, getopt,time
 import imutils
 import configparser, imageio
@@ -17,6 +18,9 @@ import ipdb
 import platealign
 import platesegseed
 import platesplit
+reload(platealign)
+reload(platesegseed)
+reload(platesplit)
 
 desc="Identify dish and align plates"
 inDirName="."
