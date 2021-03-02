@@ -7,6 +7,7 @@
 # - or any later version.
 
 from importlib import reload  
+from collections import defaultdict
 from tifffile import TiffWriter, TiffFile
 #import SimpleITK as sitk
 import numpy as np
@@ -31,6 +32,21 @@ from odf.table import Table, TableColumn, TableRow, TableCell
 #from odf.draw import Frame, Image
 from odf import draw
 from odf.office import Annotation
+
+import plateplantseg
+reload(plateplantseg)
+
+#type	batch	set_nr.	plate_nr.	plate_id	acc_id	row	column
+type,batch,set_nr,plate_nr,plate_id,acc_id,row,column = range(8)
+def loadCsv(ifile):
+    #ipdb.set_trace()
+    acc=defaultdict(list)
+    with open(ifile, 'rt', encoding='utf-8') as csvfile:
+        reader = csv.reader(csvfile, delimiter='\t', quotechar='"',quoting=csv.QUOTE_MINIMAL)
+        for row in reader:
+            if row[0] == "type": continue
+            acc[row[acc_id]].append(row)
+    return acc
 
 class ODSWriter:
 
@@ -406,69 +422,6 @@ def fix_border_plant(gmask, prevmask):
     omask = select_overlaps(gmask-ndi.binary_dilation(omask, np.ones((2,2))), prevmask)
     return omask
 
-# classify plant growth using a piecewise linear model
-def classifyGrowth(plant_heights):
-    # free parameters
-    NormalGrowthFactor = 0.8
-    NotGrowingSizeThreshold = 50
-    NotGrowingSpeedThresh = 10  #distinguish between growing and not growing plant
-
-    ix = np.array(range(len(plant_heights)))
-    # fit linear model to all
-    x, data, slope_all, intercept_all, allres = linfit(ix, plant_heights)
-    allplot = linplotarray([[x, data, slope_all, intercept_all]])
-    #print(0,allres)
-    reslist=[]
-    slopes1=[]
-    slopes2=[]
-    # find a piecewise linear model with lowest residuals
-    # split data in two parts 1 and 2 and fit linear models to them
-    bplots=[]
-    for bp in range(2, len(plant_heights)-2, 1):
-        x1, data1, slope1, intercept1, res1 = linfit(ix[:bp], plant_heights[:bp])
-        x2, data2, slope2, intercept2, res2 = linfit(ix[bp-1:], plant_heights[bp-1:])
-        #ipdb.set_trace()
-        #linplot([ [x1, data1, slope1, c1], [x2, data2, slope2, c2] ])
-        bplots.append(linplotarray([ [x1, data1, slope1, intercept1], [x2, data2, slope2, intercept2] ]))
-        #print(bp,res1+res2)
-        # estimate residuals as sum of partial residuals 
-        reslist.append(res1+res2)
-        # used to classify growth type
-        slopes1.append(slope1)
-        slopes2.append(slope2)
-
-
-    #ipdb.set_trace()
-    if np.max(plant_heights) < NotGrowingSizeThreshold:
-        print(f"Not growing")
-        return ["Not growing", None, None, allplot]
-    elif np.min(plant_heights) == 0 or slope_all < 0:
-        print(f"Detection error")
-        return ["Detection error", 0, 0, allplot]
-    elif np.min(reslist) < NormalGrowthFactor*allres:
-        xmin = np.argmin(reslist)
-        slopes1mean = np.mean(slopes1[:xmin+1])
-        slopes2mean = np.mean(slopes2[xmin:])
-        #print(xmin, slopes1mean, slopes2mean)
-        #if slopes1mean < slopes2mean:
-        if slopes1mean < NotGrowingSpeedThresh:
-            print(f"Late germination, day {xmin+1}")
-            return ["Late germination", slopes2mean, xmin+1, bplots[xmin]]
-        else:
-            #ipdb.set_trace()
-            if slopes2mean < NotGrowingSpeedThresh:
-                print(f"Stopped growing, day {xmin+1}")
-                return ["Stopped growing", slopes2mean, xmin+1, bplots[xmin]]
-            elif slopes2mean < slopes1mean:
-                print(f"Normal growth, slowdown, day {xmin+1}")
-                return ["Normal growth, slowdown", slopes2mean, xmin+1, bplots[xmin]]
-            else:
-                print(f"Normal growth, acceleration, day {xmin+1}")
-                return ["Normal growth, acceleration", slopes2mean, xmin+1, bplots[xmin]]
-    else:
-        print(f"Normal growth, regular")
-        return ["Normal growth, regular", slope_all, 0, allplot]
-    #pass
 def linfit(x, data):
     if len(x) == 2:
         m = (data[1]-data[0])/(x[1]-x[0])
@@ -501,45 +454,32 @@ def linplotarray(pdata):
     image = data.reshape(canvas.get_width_height()[::-1] + (3,))
     return image
 
-def procplant(plates, plantnum, seedmask):
-    gmasks=[seedmask]
-    # dilate for the cases when the seed moves a bit prior to germination
-    # Example: seed 0 in apogwas2/005   np.ones((19,19)
-    # Example: seed 14 in apogwas2/021  np.ones((29,29)
-    prevmask = ndi.binary_dilation(seedmask, np.ones((29,29)))
-    prevmasksum = seedmask.sum()
-    for plnum in range(1,len(plates)):
-        plate = plates[plnum]
-        gplate = cv2.cvtColor(plate, cv2.COLOR_RGB2GRAY)
-        gplate = phlib.gaussitk(gplate, 2)
-        #rb=phlib.rolling_ball_filter(gplate,2,19)
-        rb=phlib.rolling_ball_filter(gplate,4,9)
-
-        threshold = 4
-        gmaskall = (gplate.astype(np.float) - rb) > threshold
-        gmask = select_overlaps(gmaskall, prevmask, plantnum, plnum)
-        #ipdb.set_trace()
-        gmasks.append(gmask)
-        # the plant should normally not shrink, so shrinking is suspicious. Keep the last good mask
-        if gmask.sum() < 0.8*prevmasksum:
-            print("Plant %2d,%d: Plant detection failed"%(plantnum, plnum))
-        else:
-            prevmask=gmask
-            prevmasksum = prevmask.sum()
-        pass
-    maskheight = [np.nonzero(m)[0].max() - np.nonzero(m)[0].min() if m.max() > 0 else 0 for m in gmasks]
-    print(maskheight)
+def procplant(plant_name, mask_name):
+    masks  = loadTiff(mask_name)
+    plates = loadTiff(plant_name)
     #ipdb.set_trace()
-    return np.array(gmasks).astype(np.uint8), classifyGrowth(maskheight)
-   
+    maskheight = [np.nonzero(m)[0].max() - np.nonzero(m)[0].min() if m.max() > 0 else 0 for m in masks]
+    return_state = plateplantseg.classifyGrowth(plates.shape[1], maskheight)
+
+    # create plant growth image
+    cmasks = np.concatenate(masks, axis=1)[::2,::2]
+    nz = np.nonzero(cmasks)
+    cmasks = cmasks[nz[0].min()-5 : nz[0].max()+5,:]
+    cplant = np.concatenate(plates, axis=1)[::2,::2]
+    cplant = cplant[nz[0].min()-5 : nz[0].max()+5,:]
+    oplant = phlib.img3overlay(cplant, cmasks)
+    return return_state+[oplant], maskheight
+
 desc="segment individual plants in plate data"
 dirName="."
-dirName="/media/milos/SAN128/data/Patrick/batch1/apogwas2/"
+dirName="/media/milos/SAN128/data/Patrick/all/"
+tsvName="apogwas.csv"
 dishId=None
 plantNum=None
 subStart=0
 rWidth = 120
 rebuildAll=False
+reportWriter=None
 
 def usage(desc):
     global dirName, dishId, rWidth
@@ -548,13 +488,10 @@ def usage(desc):
     print("Switches:")
     print("\t-h ............... this usage")
     print("\t-d name .......... directory with plant datasets (%s)"%dirName)
-    print("\t-p subdir_name[,plant#] ... process subdirectory with plant data (all subdirs)")
-    print("\t-s INT ........... subdirectory number to start from (all subdirs)")
-    print("\t-w INT ........... region width in %% of interseed distance (%d %%)"%rWidth)
     print("\t-r ............... rebuild all")
 
 def parsecmd(desc):
-    global dirName, dishId, subStart, rWidth, rebuildAll
+    global dirName, rebuildAll
     try:
         opts, Names = getopt.getopt(sys.argv[1:], "hrd:s:p:", ["help"])
     except getopt.GetoptError as err:
@@ -577,115 +514,78 @@ def parsecmd(desc):
             rebuildAll=True
 
 def main():
-    global dirName, dishId, rebuildAll
+    global dirName, dishId, rebuildAll, reportWriter
     parsecmd(desc)
-    plantNum=None
 
-    dishFiles = {}    #dishes to process, organized by dishId
-    reprocessname=None
-    if dishId:
-        if "," in dishId:
-            dishId, plantNum = dishId.split(",")
-            globname = "%s/%s/plant-%03d-%02d_*.tif"%(dirName, dishId, int(dishId), int(plantNum))
-            reprocessname = glob.glob(globname)
-            if not reprocessname:
-                print ("%s: Error -- No files found for '%s'"%(sys.argv[0], globname))
-                sys.exit(0)
+    accessions = loadCsv(f"{dirName}/{tsvName}")
+    for accession in accessions:
+        #check first, if all plates exist (important in testing)
 
-            dishFiles[dishId] = reprocessname
-        else:
-            plantnames=sorted(glob.glob("%s/%s/plant-*.tif"%(dirName, dishId)))
-            dishFiles[dishId] = plantnames
-    else:
-        for p in range(subStart, 200):
-            dishId = "%03d"%p
-            if glob.glob("%s/%s"%(dirName, dishId)) == []: continue   # no such dish
-            if not rebuildAll:
-                if os.path.isfile("%s/%s/pmask-%s.tif"%(dirName,dishId,dishId)):
-                    print("Skipping %s"%"%s/%s"%(dirName,dishId))
-                    continue
-            plantnames=sorted(glob.glob("%s/%s/plant-*.tif"%(dirName, dishId)))
-            dishFiles[dishId] = plantnames
-    #ipdb.set_trace()
-
-    #process dishes one by one
-    for dishId in dishFiles:
-        seedsmask = loadTiff( "%s/%s/seeds-mask-%s.tif"%(dirName,dishId,dishId))
-        plantnames = dishFiles[dishId]
-        plantmasks_name = "%s/%s/pmask-%s.tif"%(dirName,dishId,dishId)
-        plantoverview_name = "%s/%s/pmask-ovl-%s.tif"%(dirName,dishId,dishId)
-
-        #ipdb.set_trace()
-
-        if reprocessname:
-            plantoverview = loadTiff(plantoverview_name)
-            plantmasks = loadTiff(plantmasks_name)
-        else:
-            plantoverview=seedsmask.copy()
-            plantmasks = np.zeros((11,seedsmask.shape[0],seedsmask.shape[1])).astype(np.uint8)
-       
-        reportWriter = ODSWriter(dishId, ["Plant number","Type","Growth rate","From day", "Growth plot","Plant growth, days 0 – 10"])
-        #reportWriter.writerow(ilist[0])
-
-        for plantname in plantnames:
-            #ipdb.set_trace()
-            ulx, uly, lrx, lry=np.array(re.findall(r"\d+",plantname.split("/")[-1])[2:]).astype(np.int)
-            plant = loadTiff(plantname)
-            pmaskname = plantname.replace("plant-","pmask-")
-            # Reload, if plant mask exists
-            print("Processing %s"%pmaskname)
-            #ipdb.set_trace()
-            pnum = int(re.findall(r"plant-[0-9]*-([0-9]*)",plantname.split("/")[-1])[0])
-            masks, return_state = procplant(plant, pnum, seedsmask[uly:lry,ulx:lrx][...,0] == 0)
-
-            # save masks file
-            with TiffWriter(plantname.replace("plant-","pmask-")) as tif:
-               tif.save(masks,compress=5)
-
-            #update plantoverview and plantmasks buffers
-            plantmasks[...,uly:lry,ulx:lrx] = np.maximum(plantmasks[...,uly:lry,ulx:lrx], 255*masks)
-            #plantoverview[uly:lry,ulx:lrx,...] = phlib.img3overlay(plant.max(axis=0), masks.max(axis=0))
-            plantoverview[uly:lry,ulx:lrx,...] = np.maximum(plantoverview[uly:lry,ulx:lrx,...], phlib.img3overlay(plant.max(axis=0), masks.max(axis=0)))
-            # draw color marks 
-            cmasks = np.concatenate(masks, axis=1)[::2,::2]
-            nz = np.nonzero(cmasks)
-            cmasks = cmasks[nz[0].min()-5 : nz[0].max()+5,:]
-            cplant = np.concatenate(plant, axis=1)[::2,::2]
-            cplant = cplant[nz[0].min()-5 : nz[0].max()+5,:]
-            oplant = phlib.img3overlay(cplant, cmasks)
-            #ipdb.set_trace()
-            if "Detection error" in return_state[0]: 
-                hcolor = (255,0,0)
-            #elif "Normal growth" in return_state: hcolor = (0,255,0)
-            elif "Not growing" in return_state[0]: 
-                hcolor = (255,255,0)
-            elif "Stopped growing" in return_state[0]: 
-                hcolor = (0, 0, 255)
-            elif "Late germination" in return_state[0]: 
-                hcolor = (0, 255, 0)
-
-            reportWriter.writerow([pnum]+return_state+[oplant])
-
-            if not "Normal growth" in return_state[0]:  
-                plantoverview[uly:uly+20,ulx:lrx,...] = hcolor
-                plantoverview[lry-20:lry,ulx:lrx,...] = hcolor
-
-
-            # create report
-            #return_state = (type, break point/growth rate, growth plot)
+        plant_dirs = {} 
+        for acs in accessions[accession]:
+            pdirectory = "%s/apogwas%s/%03d"%(dirName,acs[batch],int(acs[plate_id]))
+            if os.path.isdir(pdirectory):
+                plant_dirs[pdirectory] = acs
             pass
+        if plant_dirs and len(plant_dirs) == 8:
+            controls=[]
+            apos=[]
+            for ppd in plant_dirs:
+                pd = plant_dirs[ppd]
+                pos = 3*(4*(int(pd[row])-1) + int(pd[column]) -1)
+                for n in range(3):
+                    mask_name = glob.glob("%s/apogwas%s/%03d/pmask-*-%02d_*.tif"%(dirName,pd[batch],int(pd[plate_id]), pos+n))[0]
+                    plant_name =glob.glob("%s/apogwas%s/%03d/plant-*-%02d_*.tif"%(dirName,pd[batch],int(pd[plate_id]), pos+n))[0]
+                    print(ppd, pd, pos+n, mask_name)
+                    rslt, maskheight = procplant(plant_name, mask_name)
+                    if pd[type] == "control":
+                        controls.append([["batch%s"%pd[batch], "%03d/%d"%(int(pd[plate_id]),pos+n)]+rslt, maskheight])
+                    else:
+                        apos.append([["batch%s"%pd[batch], "%03d/%d"%(int(pd[plate_id]),pos+n)]+rslt, maskheight])
+                    pass
+                #reportWriter.writerow(retval)
+            reportWriter = plateplantseg.ODSWriter()
+            hdr=["Batch","Plate Id","Type","Growth rate","From day", "Residuals", "Growth plot","Plant growth, days 0 – 10"]
 
+            reportWriter.addtable("control", hdr)
+            ok_data=[]
+            pnames=[]
+            for rr in controls: 
+                reportWriter.writerow(rr[0])
+                if not "error" in rr[0][2]:
+                    ok_data.append(rr[1])
+                    pnames.append("%s/%s"%(rr[0][0],rr[0][1]))
+            oo=np.array(ok_data).T
+            omean=oo.mean(axis=1)
+            osdev=np.sqrt(oo.var(axis=1))
+            ot = np.hstack((oo,omean.reshape(omean.shape[0],1),osdev.reshape(omean.shape[0],1)))
 
-        reportWriter.save("%s/%s/plant_report-%s.ods"%(dirName,dishId,dishId))
-        #ipdb.set_trace()
-        with TiffWriter(plantmasks_name) as tif:
-            tif.save(plantmasks,compress=5)
-        #overview image
-        with TiffWriter(plantoverview_name) as tif:
-            #tif.save(plantoverview,compress=5)
-            tif.save(plantoverview)
-    #ipdb.set_trace()
+            hdr_data=["Day"]+[p for p in pnames] + ["Mean", "SDev",".""."]
+            reportWriter.addtable("control-data", hdr_data)
+            for n, rr in enumerate(ot): 
+                reportWriter.writerow([n]+[r for r in rr])
+
+            reportWriter.addtable("apo", hdr)
+            ok_data=[]
+            pnames=[]
+            for rr in apos: 
+                reportWriter.writerow(rr[0])
+                if not "error" in rr[0][2]:
+                    ok_data.append(rr[1])
+                    pnames.append("%s/%s"%(rr[0][0],rr[0][1]))
+            oo=np.array(ok_data).T
+            omean=oo.mean(axis=1)
+            osdev=np.sqrt(oo.var(axis=1))
+            ot = np.hstack((oo,omean.reshape(omean.shape[0],1),osdev.reshape(omean.shape[0],1)))
+
+            hdr_data=["Day"]+[p for p in pnames] + ["Mean", "SDev",".""."]
+            reportWriter.addtable("apo-data", hdr_data)
+            for n, rr in enumerate(ot): 
+                reportWriter.writerow([n]+[r for r in rr])
+
+            reportWriter.save("%s/acc-report-%s.ods"%(dirName,accession))
+            #ipdb.set_trace()
+            pass
     pass
-
 if __name__ == "__main__":
     main()

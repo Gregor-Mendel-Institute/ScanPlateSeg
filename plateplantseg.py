@@ -34,14 +34,11 @@ from odf.office import Annotation
 
 class ODSWriter:
 
-    def __init__(self, dishId, hdr):
-        self.hdr = hdr
+    def __init__(self):
         self.doc = OpenDocumentSpreadsheet()
-        self.table = Table(name=str(dishId))
-        self.doc.spreadsheet.addElement(self.table)
         #styles
         self.itemRowStyle1 = Style(name="itemRowStyle", family="table-row")
-        self.itemRowStyle1.addElement(TableRowProperties(rowheight="10mm"))
+        self.itemRowStyle1.addElement(TableRowProperties(rowheight="7mm"))
         self.doc.automaticstyles.addElement(self.itemRowStyle1)
 
         self.itemRowStyle3 = Style(name="itemRowStyle", family="table-row")
@@ -68,6 +65,7 @@ class ODSWriter:
         self.cellStyle1 = Style(name="cellStyle1",family="table-cell", parentstylename='Standard', displayname="middle")
         self.cellStyle1.addElement(ParagraphProperties(textalign="center"))
         self.cellStyle1.addElement(TableCellProperties(verticalalign="middle"))
+        self.cellStyle1.addElement(TableCellProperties(wrapoption="wrap"))
         self.doc.automaticstyles.addElement(self.cellStyle1)
 
         self.hdrStyle = Style(name="hdrStyle",family="table-cell", parentstylename='Standard', displayname="middle")
@@ -76,30 +74,22 @@ class ODSWriter:
         self.hdrStyle.addElement(TableCellProperties(verticalalign="middle"))
         self.doc.automaticstyles.addElement(self.hdrStyle)
 
-        self.exrow=0
 
-        #add columns
-        tcol = TableColumn(stylename=self.colStyle30)
-        self.table.addElement(tcol)
-        tcol = TableColumn(stylename=self.colStyle50)
-        self.table.addElement(tcol)
-        tcol = TableColumn(stylename=self.colStyle30)
-        self.table.addElement(tcol)
-        tcol = TableColumn(stylename=self.colStyle30)
-        self.table.addElement(tcol)
-        tcol = TableColumn(stylename=self.colStyle30)
-        self.table.addElement(tcol)
+    def addtable(self, name, hdr): 
+        self.table = Table(name=str(name))
+        self.doc.spreadsheet.addElement(self.table)
+
+        for h in hdr[:-2]:
+            tcol = TableColumn(stylename=self.colStyle30)
+            self.table.addElement(tcol)
         tcol = TableColumn(stylename=self.colStyle40)
         self.table.addElement(tcol)
         tcol = TableColumn(stylename=self.colStyle200)
         self.table.addElement(tcol)
 
-        self.writehdr(hdr)
-
-    def writehdr(self, items): 
-        self.exrow += 1
+        self.exrow=1
         tr = TableRow()
-        for item in items:
+        for item in hdr:
             tc = TableCell(stylename="hdrStyle") #empty cell
             tr.addElement(tc)
             p = P(text=item)
@@ -110,7 +100,19 @@ class ODSWriter:
     def writerow(self, items): 
         self.exrow += 1
             #pass
-        tr = TableRow(stylename=self.itemRowStyle3)
+        # If there is and image in the row, make the row high
+        textrow = True
+        for item in items:
+            if isinstance(item, np.ndarray):
+                textrow = False
+                break
+
+
+        if textrow:
+            tr = TableRow(stylename=self.itemRowStyle1)
+        else:
+            tr = TableRow(stylename=self.itemRowStyle3)
+
         cells = "ABCDEFGHIJKLM"
         for n in range(len(items)):
             if isinstance(items[n], (int, np.int64)):
@@ -649,8 +651,8 @@ def main():
             plantoverview=seedsmask.copy()
             plantmasks = np.zeros((11,seedsmask.shape[0],seedsmask.shape[1])).astype(np.uint8)
        
-        reportWriter = ODSWriter(dishId, ["Plant number","Type","Growth rate","From day", "Residuals", "Growth plot","Plant growth, days 0 – 10"])
-        #reportWriter.writerow(ilist[0])
+        reportWriter = ODSWriter()
+        reportWriter.addtable(dishId, ["Plant number","Type","Growth rate","From day", "Residuals", "Growth plot","Plant growth, days 0 – 10"])
 
         for plantname in plantnames:
             #ipdb.set_trace()
@@ -701,7 +703,7 @@ def main():
             #return_state = (type, break point/growth rate, growth plot)
             pass
 
-
+        reportWriter.addtable("ASD", ["Plant number","Type","Growth rate","From day", "Residuals", "Growth plot","Plant growth, days 0 – 10"])
         reportWriter.save("%s/%s/plant-report-%s.ods"%(dirName,dishId,dishId))
         #ipdb.set_trace()
         with TiffWriter(plantmasks_name) as tif:
