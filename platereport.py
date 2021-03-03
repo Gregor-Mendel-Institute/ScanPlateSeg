@@ -410,7 +410,7 @@ def main():
 
         plant_dirs = {} 
         for acs in accessions[accession]:
-            pdirectory = "%s/apogwas%s/%03d"%(dirName,acs[batch],int(acs[plate_id]))
+            pdirectory = "%s/batch%s/%03d"%(dirName,acs[batch],int(acs[plate_id]))
             if os.path.isdir(pdirectory):
                 plant_dirs[pdirectory] = acs
             pass
@@ -422,8 +422,8 @@ def main():
                 pd = plant_dirs[ppd]
                 pos = 3*(4*(int(pd[row])-1) + int(pd[column]) -1)
                 for n in range(3):
-                    mask_name = glob.glob("%s/apogwas%s/%03d/pmask-*-%02d_*.tif"%(dirName,pd[batch],int(pd[plate_id]), pos+n))[0]
-                    plant_name =glob.glob("%s/apogwas%s/%03d/plant-*-%02d_*.tif"%(dirName,pd[batch],int(pd[plate_id]), pos+n))[0]
+                    mask_name = glob.glob("%s/batch%s/%03d/pmask-*-%02d_*.tif"%(dirName,pd[batch],int(pd[plate_id]), pos+n))[0]
+                    plant_name =glob.glob("%s/batch%s/%03d/plant-*-%02d_*.tif"%(dirName,pd[batch],int(pd[plate_id]), pos+n))[0]
                     print(ppd, pd, pos+n, mask_name)
                     rslt, maskheight = procplant(plant_name, mask_name)
                     if pd[type] == "control":
