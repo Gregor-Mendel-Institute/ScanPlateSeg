@@ -246,6 +246,7 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
     ''' select the region in mask with overlaps in prevmask'''
     minsize = 400   # minimal blob area to not to be regarded as noise (minimal seed size)
     iters = 15      # number of repetitions in dilation (dilation size iter*7) (required by the plant 013/9)
+    fail_growth_factor = 1.5  #growth error if mask grows more that fail_growth_factor*pmaskheight"
 
     labels, nlabels = measure.label(mask, return_num=True)
     ovlaps = np.unique(labels*prevmask)[1:] # the first one is background
@@ -292,15 +293,12 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
             # if gmask height increases too much, we have the border problem. So fix it
             gmaskheight = np.nonzero(gmask)[0].max() - np.nonzero(gmask)[0].min()
             pmaskheight = np.nonzero(prevmask)[0].max() - np.nonzero(prevmask)[0].min()
-            #ipdb.set_trace()
-            print(gmaskheight,pmaskheight,2*pmaskheight)
-            if gmaskheight > 2* pmaskheight:
+            if gmaskheight > fail_growth_factor * pmaskheight:
                 if plantnum in (0, 12): # left side images
                     print("Plant %2d,%d fix left plant"%(plantnum, platenum))
                     gmask = fix_left_plant(gmask, prevmask)
                 elif plantnum in (11, 23): # right side images
                     print("Plant %2d,%d fix right plant"%(plantnum, platenum))
-                    ipdb.set_trace()
                     gmask = fix_right_plant(gmask, prevmask)
                 pass
         #ipdb.set_trace()
