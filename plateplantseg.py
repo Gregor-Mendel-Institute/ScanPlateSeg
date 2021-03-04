@@ -408,17 +408,6 @@ def fix_right_plant(gmask, prevmask):
     gmask = ndi.rotate(gmask,-rotangle,reshape=False)
     return select_overlaps(gmask, prevmask)
 
-# a rightmost image can touch something 'tall' on the right
-def fix_border_plant(gmask, prevmask):
-    # we assume that the incorrect mask touches top, bottom or right border
-    if not (gmask[0].any() or gmask[-1].any() and gmask[:,-1].any()):
-        return gmask
-    omask = ndi.binary_opening(gmask, np.ones((25,1)))
-    omask = getLargest(omask)
-    #ipdb.set_trace()
-    omask = select_overlaps(gmask-ndi.binary_dilation(omask, np.ones((2,2))), prevmask)
-    return omask
-
 # classify plant growth using a piecewise linear model
 def classifyGrowth(box_height, plant_heights):
     # free parameters
