@@ -563,30 +563,32 @@ def procplant(plates, plantnum, seedmask):
     return gmasks, classifyGrowth(plates.shape[1], maskheight)
    
 desc="segment individual plants in plate data"
-dirName="."
-dirName="/media/milos/SAN128/data/Patrick/batch1/apogwas2/"
+dirName=os.environ.get('APOGWAS_PATH')
 dishId=None
 plantNum=None
 subStart=0
 rWidth = 120
 rebuildAll=False
+batchNum=1
 
 def usage(desc):
-    global dirName, dishId, rWidth
+    global dirName, dishId, rWidth, batchNum
     print(sys.argv[0]+":",   desc)
     print("Usage: ", sys.argv[0], "[switches]")
     print("Switches:")
     print("\t-h ............... this usage")
     print("\t-d name .......... directory with plant datasets (%s)"%dirName)
+    print("\t-d path........... directory with plant datasets {taken from the APOGWAS_PATH environment variable}")
+    print(f"\t-b 1,2,3,4,5 .... batch number {batchNum}")
     print("\t-p subdir_name[,plant#] ... process subdirectory with plant data (all subdirs)")
     print("\t-s INT ........... subdirectory number to start from (all subdirs)")
     print("\t-w INT ........... region width in %% of interseed distance (%d %%)"%rWidth)
     print("\t-r ............... rebuild all")
 
 def parsecmd(desc):
-    global dirName, dishId, subStart, rWidth, rebuildAll
+    global dirName, dishId, subStart, rWidth, rebuildAll,batchNum
     try:
-        opts, Names = getopt.getopt(sys.argv[1:], "hrd:s:p:", ["help"])
+        opts, Names = getopt.getopt(sys.argv[1:], "hrd:s:p:b:", ["help"])
     except getopt.GetoptError as err:
         # print help information and exit:
         print(str(err)) # will print something like "option -a not recognized"
@@ -601,6 +603,8 @@ def parsecmd(desc):
             dishId = a
         elif o in ("-s"):
             subStart = int(a)
+        elif o in ("-b"):
+            batchNum = int(a)
         elif o in ("-w"):
             rWidth = int(a)
         elif o in ("-r"):
@@ -616,7 +620,9 @@ def main():
     if dishId:
         if "," in dishId:
             dishId, plantNum = dishId.split(",")
-            globname = "%s/%s/plant-%03d-%02d_*.tif"%(dirName, dishId, int(dishId), int(plantNum))
+            ipdb.set_trace()
+            dirPath = "%s/batch%d/%s"%(dirName, batchNum, dishId)
+            globname = "%s/plant-%03d-%02d_*.tif"%(dirPath, int(dishId), int(plantNum))
             reprocessname = glob.glob(globname)
             if not reprocessname:
                 print ("%s: Error -- No files found for '%s'"%(sys.argv[0], globname))
@@ -624,31 +630,34 @@ def main():
 
             dishFiles[dishId] = reprocessname
         else:
-            plantnames=sorted(glob.glob("%s/%s/plant-*.tif"%(dirName, dishId)))
+            dirPath = "%s/batch%d/%s"%(dirName, batchNum, dishId)
+            plantnames=sorted(glob.glob("%s/plant-*.tif"%dirPath))
             dishFiles[dishId] = plantnames
     else:
         for p in range(subStart, 200):
             dishId = "%03d"%p
-            if glob.glob("%s/%s"%(dirName, dishId)) == []: continue   # no such dish
+            dirPath = "%s/batch%d/%s"%(dirName, batchNum, dishId)
+            if glob.glob(dirPath) == []: continue   # no such dish
             if not rebuildAll:
-                if os.path.isfile("%s/%s/pmask-%s.tif"%(dirName,dishId,dishId)):
-                    print("Skipping %s"%"%s/%s"%(dirName,dishId))
+                if os.path.isfile("%s/pmask-%s.tif"%(dirPath,dishId)):
+                    print("Skipping %s"%dirPath)
                     continue
-            plantnames=sorted(glob.glob("%s/%s/plant-*.tif"%(dirName, dishId)))
+            plantnames=sorted(glob.glob("%s/plant-*.tif"%dirPath))
             dishFiles[dishId] = plantnames
     #ipdb.set_trace()
 
     #process dishes one by one
+    ipdb.set_trace()
     for dishId in dishFiles:
-        seedsmask = loadTiff( "%s/%s/seeds-mask-%s.tif"%(dirName,dishId,dishId))
+        dirPath = "%s/batch%d/%s"%(dirName, batchNum, dishId)
+        seedsmask = loadTiff( "%s/seeds-mask-%s.tif"%(dirPath,dishId))
         # gimp make this sometimes with alpha channel
         if seedsmask.shape[-1] == 4:
             seedsmask = seedsmask[...,:3]
         plantnames = dishFiles[dishId]
-        plantmasks_name = "%s/%s/pmask-%s.tif"%(dirName,dishId,dishId)
-        plantoverview_name = "%s/%s/pmask-ovl-%s.tif"%(dirName,dishId,dishId)
+        plantmasks_name = "%s/pmask-%s.tif"%(dirPath,dishId)
+        plantoverview_name = "%s/pmask-ovl-%s.tif"%(dirPath,dishId)
 
-        #ipdb.set_trace()
 
         if reprocessname:
             plantoverview = loadTiff(plantoverview_name)
@@ -710,7 +719,7 @@ def main():
             pass
 
         reportWriter.addtable("ASD", ["Plant number","Type","Growth rate","From day", "Residuals", "Growth plot","Plant growth, days 0 – 10"])
-        reportWriter.save("%s/%s/plant-report-%s.ods"%(dirName,dishId,dishId))
+        reportWriter.save("%s/plant-report-%s.ods"%(dirPath,dishId))
         #ipdb.set_trace()
         with TiffWriter(plantmasks_name) as tif:
             tif.save(plantmasks,compress=5)

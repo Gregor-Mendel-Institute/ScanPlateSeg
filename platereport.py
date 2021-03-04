@@ -355,8 +355,7 @@ def procplant(plant_name, mask_name):
     return return_state+[oplant], maskheight
 
 desc="Create report for individual accessions as defined by a csv/tsv file"
-dirName="."
-dirName="/media/milos/SAN128/data/Patrick/all/"
+dirName = os.environ.get('APOGWAS_PATH')
 tsvName="apogwas.csv"
 dishId=None
 accIds=[]
@@ -406,7 +405,7 @@ def main():
     accessions = loadCsv(f"{dirName}/{tsvName}")
     for accession in accessions:
         #check first, if all plates exist (important in testing)
-        if not accession in accIds: continue
+        if accIds and not accession in accIds: continue
 
         plant_dirs = {} 
         for acs in accessions[accession]:

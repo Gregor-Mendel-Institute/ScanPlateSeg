@@ -276,25 +276,24 @@ def getMaskRotationCont(img):
 def getFilesAndCreateDir(inDirName, outDirName, sid, prefix):
     pattern = "%s/%s*%s.tif"%(inDirName, prefix, sid)
     fnames = glob.glob(pattern)
-    spath = f"{outDirName}/{prefix}/{sid}"
+    #spath = f"{outDirName}/{prefix}/{sid}"
     if fnames:
-        ppath = f"{outDirName}/{prefix}" 
-        if not os.path.exists(ppath):
+        if not os.path.exists(outDirName):
             try:  
-                os.mkdir(ppath)
+                os.mkdir(outDirName)
             except OSError:  
-                print ("Creation of the directory %s failed" % ppath)
+                print ("Creation of the directory %s failed" % outDirName)
 
-        if  os.path.exists(spath):
+        if  os.path.exists(outDirName):
             try:  
-                shutil.rmtree(spath)
+                shutil.rmtree(outDirName)
             except OSError:  
-                print ("Deletion of the directory %s failed" % spath)
+                print ("Deletion of the directory %s failed" % outDirName)
                 sys.exit(1)
         try:  
-            os.mkdir(spath)
+            os.mkdir(outDirName)
         except OSError:  
-            print ("Creation of the directory %s failed" % spath)
+            print ("Creation of the directory %s failed" % outDirName)
             sys.exit(1)
     else:
         print ("No file for %s found" %pattern)

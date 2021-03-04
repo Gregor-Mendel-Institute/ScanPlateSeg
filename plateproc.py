@@ -23,8 +23,8 @@ reload(platesegseed)
 reload(platesplit)
 
 desc="Identify dish and align plates"
-inDirName="."
-outDirName=None
+outDirName=os.environ.get('APOGWAS_PATH')
+inDirName=os.environ.get('APOGWAS_SOURCE_PATH')
 
 dishId=0    # a NNN identifier od a dish
 verbose=False
@@ -46,8 +46,8 @@ def usage(desc):
     print("Switches:")
     print("\t-h .......... this usage")
     print("\t-v .......... be verbose")
-    print("\t-d name ..... directory with plant datasets (%s)"%inDirName)
-    print("\t-o name ..... directory to store the result to (in a NNN subdirecory) (%s)"%"same as input")
+    print("\t-s path...... directory with plant scans {taken from the APOGWAS_SOURCE_PATH environment variable}")
+    print("\t-d path...... directory to store the result to (in a batchX/NNN subdirecory) {taken from the APOGWAS_PATH environment variable}")
     print("\t-e string ... file name prefix (%s)"%namePrefix)
     print("\t-p NNN ...... ID of a dish (NNN) to start from (all dishes)")
     print("\t-w INT ...... region width in %% of inter seed distance (%d %%)"%rWidth)
@@ -66,11 +66,11 @@ def parsecmd(desc):
             sys.exit()
         elif o in ("-v"):
             verbose=True
-        elif o in ("-d"):
+        elif o in ("-s"):
             inDirName = a
         elif o in ("-e"):
             namePrefix = a
-        elif o in ("-o"):
+        elif o in ("-d"):
             outDirName = a
         elif o in ("-p"):
             dishId = int(a)
@@ -79,7 +79,7 @@ def parsecmd(desc):
 
 def procAll(inDirName, outDirName, dishId, prefix):
     global verbose, rWidth
-    ofpath = f"{outDirName}/{prefix}/{dishId}"
+    ofpath = "%s/%s/%s"%(outDirName, prefix.replace("apogwas","batch"), dishId)
     #reg_file="%s/plant-regions-%s.png"%(outDirName,dishId,dishId)
     reg_file="%s/plant-regions-%s.png"%(ofpath,dishId)
     if os.path.isfile(reg_file):
@@ -102,8 +102,8 @@ def procAll(inDirName, outDirName, dishId, prefix):
     if plates is None:
         if verbose:
             print("Detecting and aligning dishes for set %s*%s in %s"%(prefix,dishId,inDirName))
-        #ipdb.set_trace()
-        plates, reportLog = platealign.procPlateSet(inDirName, outDirName, dishId, prefix)
+        ipdb.set_trace()
+        plates, reportLog = platealign.procPlateSet(inDirName, ofpath, dishId, prefix)
         with TiffWriter("%s/plates-%s.tif"%(ofpath, dishId)) as tif: tif.save(plates)
         imageio.imwrite("%s/plates-%s.png"%(ofpath, dishId), plates.max(axis=0)[::4,::4,:])
     else:
@@ -135,7 +135,7 @@ def procAll(inDirName, outDirName, dishId, prefix):
     if verbose:
         print("Saving regions to %s/%s/%s"%(outDirName, prefix, dishId))
     #ipdb.set_trace()
-    reportLog = platesplit.procPlateSet(f"{outDirName}/{prefix}", dishId, plates, mask, rWidth)
+    reportLog = platesplit.procPlateSet(ofpath, dishId, plates, mask, rWidth)
     reportLogs["platesplit %s"%now] = reportLog
 
     with open("%s/plateprocsplit.txt"%(ofpath), 'w') as reportfile: reportLogs.write(reportfile)
