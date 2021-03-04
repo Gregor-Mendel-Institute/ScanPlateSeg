@@ -46,7 +46,7 @@ class ODSWriter:
         self.doc.automaticstyles.addElement(self.itemRowStyle3)
 
         self.colStyle30 = Style(name="colStyle30", family="table-column")
-        self.colStyle30.addElement(TableColumnProperties(columnwidth="30mm"))
+        self.colStyle30.addElement(TableColumnProperties(columnwidth="25mm"))
         self.doc.automaticstyles.addElement(self.colStyle30)
 
         self.colStyle40 = Style(name="colStyle40", family="table-column")
@@ -277,8 +277,8 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
             regsize = (labels==reg).sum()
             if regsize > minsize:
                 aux.append(reg)
-            else:
-                print(f"Plant {plantnum},{platenum} select_overlaps: removed blob, size {regsize}")
+            #else:
+                #print(f"Plant {plantnum},{platenum} select_overlaps: removed blob, size {regsize}")
         ovlaps=aux
 
     #ipdb.set_trace()
@@ -407,19 +407,25 @@ def fix_right_plant(gmask, prevmask):
     return select_overlaps(gmask, prevmask)
 
 # classify plant growth using a piecewise linear model
-def classifyGrowth(box_height, plant_heights):
+def classifyGrowth(box_height, plant_heights_in):
     # free parameters
     NormalGrowthFactor = 0.8
-    NotGrowingSizeThreshold = 50
+    NoGerminationSizeThreshold = 50
     NotGrowingSpeedThresh = 10  #distinguish between growing and not growing plant
+    RegularGrowthFactor = 0.75
 
-    # remove outliers
-    plant_heights = ndi.median_filter(plant_heights, size=3)
+    plant_heights_in = np.array(plant_heights_in)
+    ix = np.array(range(len(plant_heights_in)))
 
-    ix = np.array(range(len(plant_heights)))
     # fit linear model to all
-    x, data, slope_all, intercept_all, allres = linfit(ix, plant_heights)
+    x, data, slope_all, intercept_all, allres = linfit(ix, plant_heights_in)
     allplot = linplotarray([[x, data, slope_all, intercept_all]])
+
+    # exclude day 0 (owing to a large height diffrerence, which sshadows other changes in growth rate
+    # remove outliers
+    plant_heights = ndi.median_filter(plant_heights_in, size=3)
+    plant_heights =plant_heights[1:]
+    ix =ix[1:]
     #print(0,allres)
     reslist=[]
     slopes1=[]
@@ -430,56 +436,62 @@ def classifyGrowth(box_height, plant_heights):
     for bp in range(2, len(plant_heights)-2, 1):
         x1, data1, slope1, intercept1, res1 = linfit(ix[:bp], plant_heights[:bp])
         x2, data2, slope2, intercept2, res2 = linfit(ix[bp-1:], plant_heights[bp-1:])
-        #ipdb.set_trace()
         #linplot([ [x1, data1, slope1, c1], [x2, data2, slope2, c2] ])
-        bplots.append(linplotarray([ [x1, data1, slope1, intercept1], [x2, data2, slope2, intercept2] ]))
-        #print(bp,res1+res2)
+        bplots.append(linplotarray([ [0, plant_heights_in[0]], [x1, data1, slope1, intercept1], [x2, data2, slope2, intercept2] ]))
         # estimate residuals as sum of partial residuals 
         reslist.append(res1+res2)
         # used to classify growth type
         slopes1.append(slope1)
         slopes2.append(slope2)
 
-
-    print(plant_heights)
-    #ipdb.set_trace()
+    print(plant_heights_in)
+    #characteristics used to classify growth type
     xmin = np.argmin(reslist)
+    slopes1mean = np.mean(slopes1[:xmin+1])
+    if xmin == 0:
+        heights1mean = plant_heights[0]
+    else:
+        heights1mean = np.mean(plant_heights[:xmin])
+    heights2mean = np.mean(plant_heights[xmin:])
+    slopes2mean = np.mean(slopes2[xmin:])
     rmin = min(reslist)
+    #ipdb.set_trace()
     if np.min(plant_heights) == 0 or slope_all < 0:
         print(f"Detection error (vanished)" )
-        return ["Detection error (vanished)" , None, None, None, allplot]
-    elif np.max(plant_heights) < NotGrowingSizeThreshold:
-        print(f"Not growing")
-        return ["Not growing", None, None, None, allplot]
+        return ["Detection error (vanished)" , None, None, None, None, None, allplot]
+    elif np.max(plant_heights) < NoGerminationSizeThreshold:
+        print(f"Not germinated")
+        return ["Not germinated", plant_heights_in[1], None, None, None, None, allplot]
     elif np.max(plant_heights) > 0.95* box_height:
         print(f"Detection error (too large)" )
-        return ["Detection error (too large)" , None, None, None, allplot]
+        return ["Detection error (too large)" , plant_heights_in[1], None, None, None, allplot]
+    # if significant change in growth rate
     elif np.min(reslist) < NormalGrowthFactor*allres:
-        slopes1mean = np.mean(slopes1[:xmin+1])
-        slopes2mean = np.mean(slopes2[xmin:])
-        #print(xmin, slopes1mean, slopes2mean)
-        #if slopes1mean < slopes2mean:
-        if slopes1mean < NotGrowingSpeedThresh:
+        if heights1mean < NoGerminationSizeThreshold and slopes2mean > NotGrowingSpeedThresh :
             print(f"Late germination, day {xmin+1}")
-            return ["Late germination", slopes2mean, xmin+1, rmin, bplots[xmin]]
+            return ["Late germination", slopes2mean, None, xmin+1, rmin, bplots[xmin]]
         else:
             #ipdb.set_trace()
             if slopes2mean < NotGrowingSpeedThresh:
-                print(f"Stopped growing, day {xmin+1}")
-                return ["Stopped growing", slopes2mean, xmin+1, rmin, bplots[xmin]]
-            elif slopes2mean < slopes1mean:
-                print(f"Normal growth, slowdown, day {xmin+1}")
-                return ["Normal growth, slowdown", slopes2mean, xmin+1, rmin, bplots[xmin]]
+                print(f"Stopped growing, day {xmin+2}")
+                return ["Stopped growing", plant_heights_in[1], slopes2mean, 0, xmin+2, rmin, bplots[xmin]]
+            elif slopes2mean < RegularGrowthFactor*slopes1mean:
+                print(f"Normal growth, slowdown, day {xmin+2}, {slopes2mean/slopes1mean}")
+                return ["Normal growth, slowdown", plant_heights_in[1], slopes2mean, slopes2mean/slopes1mean, xmin+2, rmin, bplots[xmin]]
+            elif RegularGrowthFactor*slopes2mean > slopes1mean:
+                print(f"Normal growth, acceleration, day {xmin+2, {slopes2mean/slopes1mean}}")
+                return ["Normal growth, acceleration", plant_heights_in[1], slopes2mean,slopes2mean/slopes1mean, xmin+2, rmin, bplots[xmin]]
             else:
-                print(f"Normal growth, acceleration, day {xmin+1}")
-                return ["Normal growth, acceleration", slopes2mean, xmin+1, rmin, bplots[xmin]]
+                print(f"Normal growth, regular")
+                return ["Normal growth, regular", plant_heights_in[1], (slopes2mean+slopes1mean)/2, 1, 1, rmin, bplots[xmin]]
+    # no significant change in growth rate
     else:
         if slope_all < NotGrowingSpeedThresh:
             print(f"Stopped growing")
-            return ["Stopped growing", slope_all, 1, rmin, bplots[xmin]]
+            return ["Stopped growing", plant_heights_in[1], slope_all, None, 0, rmin, allplot]
         else:
             print(f"Normal growth, regular")
-            return ["Normal growth, regular", slope_all, 0, rmin, allplot]
+            return ["Normal growth, regular", plant_heights_in[1], slope_all, 1, 0, rmin, allplot]
     #pass
 def linfit(x, data):
     if len(x) == 2:
@@ -508,9 +520,14 @@ def linplotarray(pdata):
     plt.clf()
     ymax = np.max([np.max(pd[1]) for pd in pdata]) 
     plt.ylim(0, 1.1*ymax)
-    for (x, data, m, c) in pdata:
-        _ = plt.plot(x, data, 'o', label='Original data', markersize=10)
-        _ = plt.plot(x, m*x + c, 'r', label='Fitted line')
+    for item in pdata:
+        if len(item) == 4:
+            (x, data, m, c) = item
+            _ = plt.plot(x, data, 'o', label='Original data', markersize=10)
+            _ = plt.plot(x, m*x + c, 'r', label='Fitted line')
+        elif len(item) == 2:
+            #_ = plt.plot([item[0],item[0]], [item[1],item[1]], 'o', markersize=6)
+            _ = plt.plot([item[0]], [item[1]], 'o', markersize=15)
     canvas = plt.gca().figure.canvas
     canvas.draw()
     data = np.frombuffer(canvas.tostring_rgb(), dtype=np.uint8)
@@ -533,7 +550,7 @@ def procplant(plates, plantnum, seedmask):
 
         threshold = 4
         gmaskall = (gplate.astype(np.float) - rb) > threshold
-        #ipdb.set_trace()
+        #ipdb.set_trace(s)
         # break thin horizontal structures
         gmaskall = ndi.binary_opening(gmaskall, np.ones((7,1)))
 
@@ -541,11 +558,12 @@ def procplant(plates, plantnum, seedmask):
         #ipdb.set_trace()
         gmasks.append(gmask)
         # the plant should normally not shrink, so shrinking is suspicious. Keep the last good mask
-        if gmask.sum() < 0.8*prevmasksum:
-            print("Plant %2d,%d: Plant detection failed"%(plantnum, plnum))
+        gmasksum = gmask.sum()
+        if gmasksum < 0.8*prevmasksum:
+            print("Plant %2d,%d: Plant shrinking by %02f%%"%(plantnum, plnum, 100*(prevmasksum-gmasksum)/prevmasksum))
         else:
             prevmask=gmask
-            prevmasksum = prevmask.sum()
+            prevmasksum = gmasksum
         pass
     #failure, if the mask touches upper border
     gmasks = np.array(gmasks).astype(np.uint8)
@@ -659,7 +677,7 @@ def main():
             plantmasks = np.zeros((11,seedsmask.shape[0],seedsmask.shape[1])).astype(np.uint8)
        
         reportWriter = ODSWriter()
-        reportWriter.addtable(dishId, ["Plant number","Type","Growth rate","From day", "Residuals", "Growth plot","Plant growth, days 0 – 10"])
+        reportWriter.addtable(dishId, ["Plant number","Type","Day 1 height", "Growth rate","Accel. factor", "From day", "Residuals", "Growth plot","Plant growth, days 0 – 10"])
 
         for plantname in plantnames:
             #ipdb.set_trace()
@@ -692,7 +710,7 @@ def main():
             if "Detection error" in return_state[0]: 
                 hcolor = (255,0,0)
             #elif "Normal growth" in return_state: hcolor = (0,255,0)
-            elif "Not growing" in return_state[0]: 
+            elif "Not germinated" in return_state[0]: 
                 hcolor = (255,255,0)
             elif "Stopped growing" in return_state[0]: 
                 hcolor = (0, 0, 255)
@@ -705,12 +723,7 @@ def main():
                 plantoverview[uly:uly+20,ulx:lrx,...] = hcolor
                 plantoverview[lry-20:lry,ulx:lrx,...] = hcolor
 
-
-            # create report
-            #return_state = (type, break point/growth rate, growth plot)
-            pass
-
-        reportWriter.addtable("ASD", ["Plant number","Type","Growth rate","From day", "Residuals", "Growth plot","Plant growth, days 0 – 10"])
+        # create report
         reportWriter.save("%s/plant-report-%s.ods"%(dirPath,dishId))
         #ipdb.set_trace()
         with TiffWriter(plantmasks_name) as tif:
