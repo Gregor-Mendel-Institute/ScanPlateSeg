@@ -292,12 +292,15 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
             # if gmask height increases too much, we have the border problem. So fix it
             gmaskheight = np.nonzero(gmask)[0].max() - np.nonzero(gmask)[0].min()
             pmaskheight = np.nonzero(prevmask)[0].max() - np.nonzero(prevmask)[0].min()
+            #ipdb.set_trace()
+            print(gmaskheight,pmaskheight,2*pmaskheight)
             if gmaskheight > 2* pmaskheight:
                 if plantnum in (0, 12): # left side images
                     print("Plant %2d,%d fix left plant"%(plantnum, platenum))
                     gmask = fix_left_plant(gmask, prevmask)
                 elif plantnum in (11, 23): # right side images
                     print("Plant %2d,%d fix right plant"%(plantnum, platenum))
+                    ipdb.set_trace()
                     gmask = fix_right_plant(gmask, prevmask)
                 pass
         #ipdb.set_trace()
@@ -343,7 +346,7 @@ def drawHoughLines(gmask, lines):
 # a leftmost image can touch something 'big' on the left, usually a vertical strip (or strips)
 def fix_left_plant(gmask, prevmask):
     # we assume that the incorrect mask touches top, botton or left border
-    if not (gmask[0].any() or gmask[-1].any() and gmask[:,0].any()):
+    if not (gmask[0].any() or gmask[-1].any() or gmask[:,0].any()):
         return gmask
     gmask = gmask.astype(np.uint8)
 
@@ -377,7 +380,7 @@ def fix_left_plant(gmask, prevmask):
 # a rightmost image can touch something 'big' on the right, usually a vertical strip (or strips)
 def fix_right_plant(gmask, prevmask):
     # we assume that the incorrect mask touches top, botton or right border
-    if not (gmask[0].any() or gmask[-1].any() and gmask[:,0].any()):
+    if not (gmask[0].any() or gmask[-1].any() or gmask[:,-1].any()):
         return gmask
     gmask = gmask.astype(np.uint8)
     # detect vertical strips as lines to estimate their angle
