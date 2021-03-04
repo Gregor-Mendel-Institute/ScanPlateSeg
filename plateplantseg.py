@@ -288,7 +288,7 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
         gmask += (labels == lbl)
         # the problems occur for large platenums and height increase may be large for platenum == 1
         # thus, check only id platenum > 1
-        if platenum > 1 and plantnum in (0, 12, 13, 23): # left side images
+        if platenum > 1 and plantnum in (0, 11, 12, 23): # left side images
             # if gmask height increases too much, we have the border problem. So fix it
             gmaskheight = np.nonzero(gmask)[0].max() - np.nonzero(gmask)[0].min()
             pmaskheight = np.nonzero(prevmask)[0].max() - np.nonzero(prevmask)[0].min()
