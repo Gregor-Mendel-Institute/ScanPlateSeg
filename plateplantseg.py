@@ -499,7 +499,11 @@ def linfit(x, data):
     else:
         A = np.vstack([x, np.ones(len(x))]).T
         (m, c), res = np.linalg.lstsq(A, data, rcond=None)[:2]
-        return x, data, m, c, np.sqrt(res[0]/data.mean())
+        # normalize res, check if all data points are equal 0
+        if data.any():
+            return x, data, m, c, np.sqrt(res[0]/data.mean())
+        else:
+            return x, data, m, c, res[0]
 
 def linplot(pdata):
     plt.clf()
@@ -620,7 +624,6 @@ def main():
     if dishId:
         if "," in dishId:
             dishId, plantNum = dishId.split(",")
-            ipdb.set_trace()
             dirPath = "%s/batch%d/%s"%(dirName, batchNum, dishId)
             globname = "%s/plant-%03d-%02d_*.tif"%(dirPath, int(dishId), int(plantNum))
             reprocessname = glob.glob(globname)
@@ -647,7 +650,6 @@ def main():
     #ipdb.set_trace()
 
     #process dishes one by one
-    ipdb.set_trace()
     for dishId in dishFiles:
         dirPath = "%s/batch%d/%s"%(dirName, batchNum, dishId)
         seedsmask = loadTiff( "%s/seeds-mask-%s.tif"%(dirPath,dishId))
