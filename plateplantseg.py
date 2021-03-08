@@ -560,7 +560,8 @@ def procplant(plates, plantnum, seedmask):
         # the plant should normally not shrink, so shrinking is suspicious. Keep the last good mask
         gmasksum = gmask.sum()
         if gmasksum < 0.8*prevmasksum:
-            print("Plant %2d,%d: Plant shrinking by %02f%%"%(plantnum, plnum, 100*(prevmasksum-gmasksum)/prevmasksum))
+            #print("Plant %2d,%d: Plant shrinking by %02f%%"%(plantnum, plnum, 100*(prevmasksum-gmasksum)/prevmasksum))
+            pass
         else:
             prevmask=gmask
             prevmasksum = gmasksum
