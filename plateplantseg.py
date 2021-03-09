@@ -366,6 +366,7 @@ def fix_left_plant(gmask, prevmask):
     gprof=gmask[pmiy:pmay,:].sum(axis=0)
     gprof = gprof > 0.8*(pmay-pmiy)
     if not gprof.any():
+        # unclear case, return somethinng which would be late classified as failure
         return gmask
     cutpos = np.nonzero(gprof)[0].max() # the rightmost value, we hope this is where the plant touches it
     gmask[:,:cutpos] = 0
@@ -389,7 +390,7 @@ def fix_right_plant(gmask, prevmask):
     # convert angles > pi/2 to negative
     angles = [ll[0][1] if ll[0][1] < np.pi/2 else ll[0][1] - np.pi for ll in lines]
     rotangle = 180*np.mean(angles)/np.pi
-    # analyze only in the vertivcal range of nonzero prevmask values
+    # analyze only in the vertical range of nonzero prevmask values
     nz = np.nonzero(prevmask)
     pmiy = nz[0].min()
     pmay = nz[0].max()
@@ -398,6 +399,9 @@ def fix_right_plant(gmask, prevmask):
     # compute foreground pixels in vertical columns, the strips go top to bottom
     gprof=gmask[pmiy:pmay,:].sum(axis=0)
     gprof = gprof > 0.8*(pmay-pmiy)
+    if not gprof.any():
+        # unclear case, return somethinng which would be late classified as failure
+        return gmask
     cutpos = np.nonzero(gprof)[0].min() # the leftmost value, we hope this is where the plant touches it
     gmask[:,cutpos:] = 0
     # remove noise along the border
@@ -590,7 +594,6 @@ def usage(desc):
     print("Usage: ", sys.argv[0], "[switches]")
     print("Switches:")
     print("\t-h ............... this usage")
-    print("\t-d name .......... directory with plant datasets (%s)"%dirName)
     print("\t-d path........... directory with plant datasets {taken from the APOGWAS_PATH environment variable}")
     print(f"\t-b 1,2,3,4,5 .... batch number {batchNum}")
     print("\t-p subdir_name[,plant#] ... process subdirectory with plant data (all subdirs)")
