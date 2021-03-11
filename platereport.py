@@ -343,7 +343,9 @@ def procplant(plant_name, mask_name):
     plates = loadTiff(plant_name)
     #ipdb.set_trace()
     maskheight = [np.nonzero(m)[0].max() - np.nonzero(m)[0].min() if m.max() > 0 else 0 for m in masks]
-    return_state = plateplantseg.classifyGrowth(plates.shape[1], maskheight)
+    border_tb = [m[0].any() or m[-1].any() for m in gmasks]
+    border_lr = [m[:,0].any() or m[:,-1].any() for m in gmasks]
+    return_state = plateplantseg.classifyGrowth(plates.shape[1], maskheight, border_tb, border_lr)
 
     # create plant growth image
     cmasks = np.concatenate(masks, axis=1)[::2,::2]
@@ -432,7 +434,7 @@ def main():
                     pass
                 #reportWriter.writerow(retval)
             reportWriter = plateplantseg.ODSWriter()
-            hdr1=["Batch","Plate Id","Type","Seed height", "Day 1 height", "Growth rate","Accel. factor", "From day", "Residuals"]
+            hdr1=["Batch","Plate Id","Type","Seed height", "Day 1 height", "Growth rate","Accel. factor", "From day", "Residuals", "Valid time steps" ]
             hdr2=["Growth plot","Plant growth, Days 0 – 10"]
 
             # print report for controls
