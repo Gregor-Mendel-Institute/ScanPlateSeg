@@ -343,8 +343,8 @@ def procplant(plant_name, mask_name):
     plates = loadTiff(plant_name)
     #ipdb.set_trace()
     maskheight = [np.nonzero(m)[0].max() - np.nonzero(m)[0].min() if m.max() > 0 else 0 for m in masks]
-    border_tb = [m[0].any() or m[-1].any() for m in gmasks]
-    border_lr = [m[:,0].any() or m[:,-1].any() for m in gmasks]
+    border_tb = [m[0].any() or m[-1].any() for m in masks]
+    border_lr = [m[:,0].any() or m[:,-1].any() for m in masks]
     return_state = plateplantseg.classifyGrowth(plates.shape[1], maskheight, border_tb, border_lr)
 
     # create plant growth image
