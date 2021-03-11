@@ -470,15 +470,6 @@ def classifyGrowth(box_height, plant_heights_in, border_tb, border_lr):
         slopes2.append(slope2)
 
     print(plant_heights_in)
-    #characteristics used to classify growth type
-    xmin = np.argmin(reslist)
-    slopes1mean = np.mean(slopes1[:xmin+1])
-    if xmin == 0:
-        heights1mean = plant_heights[0]
-    else:
-        heights1mean = np.mean(plant_heights[:xmin])
-    heights2mean = np.mean(plant_heights[xmin:])
-    slopes2mean = np.mean(slopes2[xmin:])
     #ipdb.set_trace()
     if np.max(plant_heights) < NoGerminationSizeThreshold:
         print(f"Not germinated")
@@ -494,6 +485,15 @@ def classifyGrowth(box_height, plant_heights_in, border_tb, border_lr):
         return ["Detection error (not enough valid time steps)" , plant_heights_in[0], plant_heights_in[1], slope_all, 1, 0, allres, valid_range, allplot]
     # if significant change in growth rate
     elif np.min(reslist) < NormalGrowthFactor*allres:
+        #characteristics used to classify growth type
+        xmin = np.argmin(reslist)
+        slopes1mean = np.mean(slopes1[:xmin+1])
+        if xmin == 0:
+            heights1mean = plant_heights[0]
+        else:
+            heights1mean = np.mean(plant_heights[:xmin])
+        heights2mean = np.mean(plant_heights[xmin:])
+        slopes2mean = np.mean(slopes2[xmin:])
         rmin = min(reslist)
         if heights1mean < NoGerminationSizeThreshold and slopes2mean > NotGrowingSpeedThresh :
             print(f"Late germination, day {xmin+1}")
