@@ -573,9 +573,10 @@ def procplant(plates, plantnum, seedmask):
     #failure, if the mask touches upper border
     gmasks = np.array(gmasks).astype(np.uint8)
     #ipdb.set_trace()
+    # problem plant: batch3/099,0
     if gmasks.max(axis=0)[0,:].any():
-        print(f"Detection error (too large)" )
-        return gmasks, ["Detection error (too large)" , None, None, None, None]
+        print(f"Detection error (too large2)" )
+        return gmasks, ["Detection error (too large2)" , None, None, None, None, None, None, None]
     maskheight = [np.nonzero(m)[0].max() - np.nonzero(m)[0].min() if m.max() > 0 else 0 for m in gmasks]
     return gmasks, classifyGrowth(plates.shape[1], maskheight)
    

@@ -73,7 +73,7 @@ def parsecmd(desc):
         elif o in ("-d"):
             outDirName = a
         elif o in ("-p"):
-            dishId = int(a)
+            dishId = a
         elif o in ("-w"):
             rWidth = int(a)
 
@@ -102,7 +102,6 @@ def procAll(inDirName, outDirName, dishId, prefix):
     if plates is None:
         if verbose:
             print("Detecting and aligning dishes for set %s*%s in %s"%(prefix,dishId,inDirName))
-        ipdb.set_trace()
         plates, reportLog = platealign.procPlateSet(inDirName, ofpath, dishId, prefix)
         with TiffWriter("%s/plates-%s.tif"%(ofpath, dishId)) as tif: tif.save(plates)
         imageio.imwrite("%s/plates-%s.png"%(ofpath, dishId), plates.max(axis=0)[::4,::4,:])
@@ -146,8 +145,7 @@ def main():
     parsecmd(desc)
     outDirName = outDirName if outDirName else inDirName
 
-    #ipdb.set_trace()
-    if False and dishId:
+    if dishId:
         procAll(inDirName, outDirName, dishId, namePrefix)
     else:
         for p in range(dishId,200):

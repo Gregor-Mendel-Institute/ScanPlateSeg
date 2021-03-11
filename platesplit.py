@@ -96,7 +96,7 @@ def usage(desc):
     print( "\t-r ............... rebuild all")
 
 def parsecmd(desc):
-    global dirName, dishId, subStart, rWidth, rebuildAll
+    global dirName, dishId, subStart, rWidth, rebuildAll, batchNum
     try:
         opts, Names = getopt.getopt(sys.argv[1:], "hrd:s:p:w:b:", ["help"])
     except getopt.GetoptError as err:
