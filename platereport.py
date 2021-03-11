@@ -447,7 +447,7 @@ def main():
                 if not "error" in rr[0][2]:
                     ok_data.append(rr[1])
                     pnames.append("%s/%s"%(rr[0][0],rr[0][1]))
-                    csvRows.append(["control"] + rr[0][:9] + rr[1])
+                    csvRows.append(["control"] + rr[0][:-2] + rr[1])
             oo=np.array(ok_data).T
             omean=oo.mean(axis=1)
             osdev=np.sqrt(oo.var(axis=1))
@@ -467,7 +467,7 @@ def main():
                 if not "error" in rr[0][2]:
                     ok_data.append(rr[1])
                     pnames.append("%s/%s"%(rr[0][0],rr[0][1]))
-                    csvRows.append(["apo"] + rr[0][:9] + rr[1])
+                    csvRows.append(["apo"] + rr[0][:-2] + rr[1])
             oo=np.array(ok_data).T
             omean=oo.mean(axis=1)
             osdev=np.sqrt(oo.var(axis=1))
