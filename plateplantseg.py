@@ -460,12 +460,12 @@ def classifyGrowth(box_height, plant_heights_in):
     slopes2mean = np.mean(slopes2[xmin:])
     rmin = min(reslist)
     #ipdb.set_trace()
-    if np.min(plant_heights) == 0 or slope_all < 0:
-        print(f"Detection error (vanished)" )
-        return ["Detection error (vanished)" , plant_heights_in[0], None, None, None, None, None, allplot]
-    elif np.max(plant_heights) < NoGerminationSizeThreshold:
+    if np.max(plant_heights) < NoGerminationSizeThreshold:
         print(f"Not germinated")
         return ["Not germinated", plant_heights_in[0], plant_heights_in[1], None, None, None, None, allplot]
+    elif np.min(plant_heights) == 0 or slope_all < 0:
+        print(f"Detection error (vanished)" )
+        return ["Detection error (vanished)" , plant_heights_in[0], None, None, None, None, None, allplot]
     elif np.max(plant_heights) > 0.95* box_height:
         print(f"Detection error (too large)" )
         return ["Detection error (too large)" , plant_heights_in[0], plant_heights_in[1], None, None, None, None, allplot]
@@ -682,7 +682,10 @@ def main():
             plantmasks = np.zeros((11,seedsmask.shape[0],seedsmask.shape[1])).astype(np.uint8)
        
         reportWriter = ODSWriter()
-        reportWriter.addtable(dishId, ["Plant number","Type","Seed height", "Day 1 height", "Growth rate","Accel. factor", "From day", "Residuals", "Growth plot","Plant growth, days 0 – 10"])
+        hdr1 = ["Plant number","Type","Seed height", "Day 1 height", "Growth rate","Accel. factor", "From day", "Residuals"]
+        hdr2 = ["Growth plot","Plant growth, days 0 – 10"]
+        reportWriter.addtable(dishId, hdr1 + hdr2)
+        csvReportRows = [hdr1]
 
         for plantname in plantnames:
             #ipdb.set_trace()
@@ -723,6 +726,7 @@ def main():
                 hcolor = (0, 255, 0)
 
             reportWriter.writerow([pnum]+return_state+[oplant])
+            csvReportRows.append([pnum]+return_state[:-1])
 
             if not "Normal growth" in return_state[0]:  
                 plantoverview[uly:uly+20,ulx:lrx,...] = hcolor
@@ -730,6 +734,10 @@ def main():
 
         # create report
         reportWriter.save("%s/plant-report-%s.ods"%(dirPath,dishId))
+        with open("%s/plant-report-%s.csv"%(dirPath,dishId), "w") as cf:
+            csvWriter = csv.writer(cf, delimiter='\t', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            for csvRow in csvReportRows:
+                csvWriter.writerow(csvRow)
         #ipdb.set_trace()
         with TiffWriter(plantmasks_name) as tif:
             tif.save(plantmasks,compress=5)
