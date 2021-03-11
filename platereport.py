@@ -154,7 +154,7 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
 
     # check in a loop
     while sumovlaps < minsize: 
-        print(f"Plant {plantnum},{platenum} select_overlaps: dilation of prevmask")
+        #print(f"Plant {plantnum},{platenum} select_overlaps: dilation of prevmask")
         prevmask = ndi.binary_dilation(prevmask, np.ones((7,1)))
         prevmask = ndi.binary_dilation(prevmask, np.ones((1,7)))
         ovlaps = np.unique(labels*prevmask)[1:] # the first one is background
@@ -170,8 +170,8 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
             regsize = (labels==reg).sum()
             if regsize > minsize:
                 aux.append(reg)
-            else:
-                print(f"Plant {plantnum},{platenum} select_overlaps: removed blob, size {regsize}")
+            #else:
+                #print(f"Plant {plantnum},{platenum} select_overlaps: removed blob, size {regsize}")
         ovlaps=aux
 
     #ipdb.set_trace()
@@ -189,10 +189,10 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
             #ipdb.set_trace()
             if gmaskheight > 2* pmaskheight:
                 if plantnum in (0, 12): # left side images
-                    print("Plant %2d,%d fix left plant"%(plantnum, platenum))
+                    #print("Plant %2d,%d fix left plant"%(plantnum, platenum))
                     gmask = fix_left_plant(gmask, prevmask)
                 elif plantnum in (11, 23): # right side images
-                    print("Plant %2d,%d fix right plant"%(plantnum, platenum))
+                    #print("Plant %2d,%d fix right plant"%(plantnum, platenum))
                     gmask = fix_right_plant(gmask, prevmask)
                 pass
         #ipdb.set_trace()
@@ -413,6 +413,7 @@ def main():
             if os.path.isdir(pdirectory):
                 plant_dirs[pdirectory] = acs
             pass
+        # if we have collected 8 dishes, write the report
         if plant_dirs and len(plant_dirs) == 8:
             print(f"Processing accession {accession}") 
             controls=[]
@@ -423,7 +424,6 @@ def main():
                 for n in range(3):
                     mask_name = glob.glob("%s/batch%s/%03d/pmask-*-%02d_*.tif"%(dirName,pd[batch],int(pd[plate_id]), pos+n))[0]
                     plant_name =glob.glob("%s/batch%s/%03d/plant-*-%02d_*.tif"%(dirName,pd[batch],int(pd[plate_id]), pos+n))[0]
-                    print(ppd, pd, pos+n, mask_name)
                     rslt, maskheight = procplant(plant_name, mask_name)
                     if pd[type] == "control":
                         controls.append([["batch%s"%pd[batch], "%03d/%d"%(int(pd[plate_id]),pos+n)]+rslt, maskheight])
@@ -432,16 +432,20 @@ def main():
                     pass
                 #reportWriter.writerow(retval)
             reportWriter = plateplantseg.ODSWriter()
-            hdr=["Batch","Plate Id","Type","Growth rate","From day", "Residuals", "Growth plot","Plant growth, days 0 – 10"]
+            hdr1=["Batch","Plate Id","Type","Seed height", "Day 1 height", "Growth rate","Accel. factor", "From day", "Residuals"]
+            hdr2=["Growth plot","Plant growth, Days 0 – 10"]
 
-            reportWriter.addtable("control", hdr)
+            # print report for controls
+            reportWriter.addtable("control", hdr1+hdr2)
             ok_data=[]
             pnames=[]
+            csvRows=[]
             for rr in controls: 
                 reportWriter.writerow(rr[0])
                 if not "error" in rr[0][2]:
                     ok_data.append(rr[1])
                     pnames.append("%s/%s"%(rr[0][0],rr[0][1]))
+                    csvRows.append(["control"] + rr[0][:9] + rr[1])
             oo=np.array(ok_data).T
             omean=oo.mean(axis=1)
             osdev=np.sqrt(oo.var(axis=1))
@@ -452,7 +456,8 @@ def main():
             for n, rr in enumerate(ot): 
                 reportWriter.writerow([n]+[r for r in rr])
 
-            reportWriter.addtable("apo", hdr)
+            # print report for apos
+            reportWriter.addtable("apo", hdr1+hdr2)
             ok_data=[]
             pnames=[]
             for rr in apos: 
@@ -460,6 +465,7 @@ def main():
                 if not "error" in rr[0][2]:
                     ok_data.append(rr[1])
                     pnames.append("%s/%s"%(rr[0][0],rr[0][1]))
+                    csvRows.append(["apo"] + rr[0][:9] + rr[1])
             oo=np.array(ok_data).T
             omean=oo.mean(axis=1)
             osdev=np.sqrt(oo.var(axis=1))
@@ -471,6 +477,13 @@ def main():
                 reportWriter.writerow([n]+[r for r in rr])
 
             reportWriter.save("%s/acc-report-%s.ods"%(dirName,accession))
+
+            with open("%s/acc-report-%s-csv.csv"%(dirName,accession), "w") as cf:
+                csvWriter = csv.writer(cf, delimiter='\t', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+                csvWriter.writerow(["control/apo"]+hdr1+["Height day %d"%d for d in range(11)])
+                for csvRow in csvRows:
+                    csvWriter.writerow(csvRow)
+
             #ipdb.set_trace()
             pass
     pass

@@ -462,40 +462,40 @@ def classifyGrowth(box_height, plant_heights_in):
     #ipdb.set_trace()
     if np.min(plant_heights) == 0 or slope_all < 0:
         print(f"Detection error (vanished)" )
-        return ["Detection error (vanished)" , None, None, None, None, None, allplot]
+        return ["Detection error (vanished)" , plant_heights_in[0], None, None, None, None, None, allplot]
     elif np.max(plant_heights) < NoGerminationSizeThreshold:
         print(f"Not germinated")
-        return ["Not germinated", plant_heights_in[1], None, None, None, None, allplot]
+        return ["Not germinated", plant_heights_in[0], plant_heights_in[1], None, None, None, None, allplot]
     elif np.max(plant_heights) > 0.95* box_height:
         print(f"Detection error (too large)" )
-        return ["Detection error (too large)" , plant_heights_in[1], None, None, None, allplot]
+        return ["Detection error (too large)" , plant_heights_in[0], plant_heights_in[1], None, None, None, None, allplot]
     # if significant change in growth rate
     elif np.min(reslist) < NormalGrowthFactor*allres:
         if heights1mean < NoGerminationSizeThreshold and slopes2mean > NotGrowingSpeedThresh :
             print(f"Late germination, day {xmin+1}")
-            return ["Late germination", slopes2mean, None, xmin+1, rmin, bplots[xmin]]
+            return ["Late germination", plant_heights_in[0], plant_heights_in[1], slopes2mean, 1, xmin+1, rmin, bplots[xmin]]
         else:
             #ipdb.set_trace()
             if slopes2mean < NotGrowingSpeedThresh:
                 print(f"Stopped growing, day {xmin+2}")
-                return ["Stopped growing", plant_heights_in[1], slopes2mean, 0, xmin+2, rmin, bplots[xmin]]
+                return ["Stopped growing", plant_heights_in[0], plant_heights_in[1], slopes2mean, 0, xmin+2, rmin, bplots[xmin]]
             elif slopes2mean < RegularGrowthFactor*slopes1mean:
                 print(f"Normal growth, slowdown, day {xmin+2}, {slopes2mean/slopes1mean}")
-                return ["Normal growth, slowdown", plant_heights_in[1], slopes2mean, slopes2mean/slopes1mean, xmin+2, rmin, bplots[xmin]]
+                return ["Normal growth, slowdown", plant_heights_in[0], plant_heights_in[1], slopes2mean, slopes2mean/slopes1mean, xmin+2, rmin, bplots[xmin]]
             elif RegularGrowthFactor*slopes2mean > slopes1mean:
                 print(f"Normal growth, acceleration, day {xmin+2, {slopes2mean/slopes1mean}}")
-                return ["Normal growth, acceleration", plant_heights_in[1], slopes2mean,slopes2mean/slopes1mean, xmin+2, rmin, bplots[xmin]]
+                return ["Normal growth, acceleration", plant_heights_in[0], plant_heights_in[1], slopes2mean,slopes2mean/slopes1mean, xmin+2, rmin, bplots[xmin]]
             else:
                 print(f"Normal growth, regular")
-                return ["Normal growth, regular", plant_heights_in[1], (slopes2mean+slopes1mean)/2, 1, 1, rmin, bplots[xmin]]
+                return ["Normal growth, regular", plant_heights_in[0], plant_heights_in[1], (slopes2mean+slopes1mean)/2, 1, 1, rmin, bplots[xmin]]
     # no significant change in growth rate
     else:
         if slope_all < NotGrowingSpeedThresh:
             print(f"Stopped growing")
-            return ["Stopped growing", plant_heights_in[1], slope_all, None, 0, rmin, allplot]
+            return ["Stopped growing", plant_heights_in[0], plant_heights_in[1], slope_all, None, 0, rmin, allplot]
         else:
             print(f"Normal growth, regular")
-            return ["Normal growth, regular", plant_heights_in[1], slope_all, 1, 0, rmin, allplot]
+            return ["Normal growth, regular", plant_heights_in[0], plant_heights_in[1], slope_all, 1, 0, rmin, allplot]
     #pass
 def linfit(x, data):
     if len(x) == 2:
@@ -681,7 +681,7 @@ def main():
             plantmasks = np.zeros((11,seedsmask.shape[0],seedsmask.shape[1])).astype(np.uint8)
        
         reportWriter = ODSWriter()
-        reportWriter.addtable(dishId, ["Plant number","Type","Day 1 height", "Growth rate","Accel. factor", "From day", "Residuals", "Growth plot","Plant growth, days 0 – 10"])
+        reportWriter.addtable(dishId, ["Plant number","Type","Seed height", "Day 1 height", "Growth rate","Accel. factor", "From day", "Residuals", "Growth plot","Plant growth, days 0 – 10"])
 
         for plantname in plantnames:
             #ipdb.set_trace()
