@@ -10,24 +10,12 @@ from tifffile import TiffWriter, TiffFile
 import sys, glob, shutil, os, getopt
 import numpy as np
 import phlib
+from phlib import plot, disp
 from skimage import measure
 import cv2, imutils
 import scipy.ndimage as ndi
 from time import gmtime, strftime
-#import ipdb
-
-def plot(data):
-    # data is tuple of lists
-    for d in data:
-        plt.plot(range(len(d)),d)
-    plt.show()
-
-def disp(iimg, label = None, gray=False):
-    """ Display an image using pylab
-    """
-    import pylab, matplotlib
-    matplotlib.interactive(True)
-    matplotlib.pyplot.imshow(iimg, interpolation='none')
+import ipdb
 
 def maskPlate3(img, mask):
     for n in range(img.shape[2]):
@@ -264,8 +252,8 @@ def findSeeds(plates, gsigma, mergelevel):
     #find two highest peeks in blobcnt
     # count number of blobs along rows
     blobcnt=np.array([measure.label(mm, return_num=True)[1] for mm in mask1])
-    # label individual regions
-    collabels, nlabels = measure.label(blobcnt>0, return_num=True)
+    # label individual regions, extend the mask (too small for outlier seeds)
+    collabels, nlabels = measure.label(ndi.binary_dilation(blobcnt>0, np.ones(10)), return_num=True)
     # find maximum value in each region
     lmax = [blobcnt[np.nonzero(collabels==m+1)].max() for m in range(nlabels)] 
     #select the two with maximum value
