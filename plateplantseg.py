@@ -12,7 +12,7 @@ from tifffile import TiffWriter, TiffFile
 import numpy as np
 import sys, glob, re, os, getopt, csv, tempfile
 import cv2, math, imageio
-import ipdb
+from ipdb import set_trace as trace
 import phlib
 reload(phlib)
 from phlib import disp,plot
@@ -281,7 +281,7 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
                 #print(f"Plant {plantnum},{platenum} select_overlaps: removed blob, size {regsize}")
         ovlaps=aux
 
-    #ipdb.set_trace()
+    #trace()
     # select all overlapping regions
     gmask = labels.copy()
     gmask[:]=0
@@ -301,7 +301,7 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
                     print("Plant %2d,%d fix right plant"%(plantnum, platenum))
                     gmask = fix_right_plant(gmask, prevmask)
                 pass
-        #ipdb.set_trace()
+        #trace()
     return gmask
 
 def select_largest_overlap(mask, prevmask):
@@ -321,7 +321,7 @@ def segPlateStat(gplate, bgmask=None, thrsigma=4):
     #estimate statistical parameters of what we think is background
     mean, cov = regstat(gplate,bgmask*(gplate < mean + np.sqrt(cov)))
     #return getLargest(bgmask *(gplate > mean + thrsigma*np.sqrt(cov)))
-    #ipdb.set_trace()
+    #trace()
     return gplate > mean + thrsigma*np.sqrt(cov)
 
 def drawHoughLines(gmask, lines):
@@ -472,7 +472,7 @@ def classifyGrowth(box_height, plant_heights_in, border_tb, border_lr):
         slopes2.append(slope2)
 
     print(plant_heights_in)
-    #ipdb.set_trace()
+    #trace()
     if np.max(plant_heights) < NoGerminationSizeThreshold:
         print(f"Not germinated")
         return ["Not germinated", plant_heights_in[0], plant_heights_in[1], None, None, None, None, valid_range, allplot]
@@ -501,7 +501,7 @@ def classifyGrowth(box_height, plant_heights_in, border_tb, border_lr):
             print(f"Late germination, day {xmin+1}")
             return ["Late germination", plant_heights_in[0], plant_heights_in[1], slopes2mean, 1, xmin+1, rmin, valid_range, bplots[xmin]]
         else:
-            #ipdb.set_trace()
+            #trace()
             if slopes2mean < NotGrowingSpeedThresh:
                 print(f"Stopped growing, day {xmin+2}")
                 return ["Stopped growing", plant_heights_in[0], plant_heights_in[1], slopes2mean, 0, xmin+2, rmin, valid_range, bplots[xmin]]
@@ -581,12 +581,12 @@ def procplant(plates, plantnum, seedmask):
 
         threshold = 4
         gmaskall = (gplate.astype(np.float) - rb) > threshold
-        #ipdb.set_trace(s)
+        #trace(s)
         # break thin horizontal structures
         gmaskall = ndi.binary_opening(gmaskall, np.ones((7,1)))
 
         gmask = select_overlaps(gmaskall, prevmask, plantnum, plnum)
-        #ipdb.set_trace()
+        #trace()
         gmasks.append(gmask)
         # the plant should normally not shrink, so shrinking is suspicious. Keep the last good mask
         gmasksum = gmask.sum()
@@ -688,7 +688,7 @@ def main():
                     continue
             plantnames=sorted(glob.glob("%s/plant-*.tif"%dirPath))
             dishFiles[dishId] = plantnames
-    #ipdb.set_trace()
+    #trace()
 
     #process dishes one by one
     for dishId in dishFiles:
@@ -716,7 +716,7 @@ def main():
         csvReportRows = [hdr1]
 
         for plantname in plantnames:
-            #ipdb.set_trace()
+            #trace()
             ulx, uly, lrx, lry=np.array(re.findall(r"\d+",plantname.split("/")[-1])[2:]).astype(np.int)
             plant = loadTiff(plantname)
             pmaskname = plantname.replace("plant-","pmask-")
@@ -742,7 +742,7 @@ def main():
             cplant = np.concatenate(plant, axis=1)[::2,::2]
             cplant = cplant[m_from:m_to,:]
             oplant = phlib.img3overlay(cplant, cmasks)
-            #ipdb.set_trace()
+            #trace()
             if "Detection error" in return_state[0]: 
                 hcolor = (255,0,0)
             #elif "Normal growth" in return_state: hcolor = (0,255,0)
@@ -766,14 +766,14 @@ def main():
             csvWriter = csv.writer(cf, delimiter='\t', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             for csvRow in csvReportRows:
                 csvWriter.writerow(csvRow)
-        #ipdb.set_trace()
+        #trace()
         with TiffWriter(plantmasks_name) as tif:
             tif.save(plantmasks,compress=5)
         #overview image
         with TiffWriter(plantoverview_name) as tif:
             #tif.save(plantoverview,compress=5)
             tif.save(plantoverview)
-    #ipdb.set_trace()
+    #trace()
     pass
 
 if __name__ == "__main__":

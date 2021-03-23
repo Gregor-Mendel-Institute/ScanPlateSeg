@@ -485,9 +485,7 @@ def main():
                 csvWriter.writerow(["Control/apo", "Accession"]+hdr1+["Height day %d"%d for d in range(11)])
                 for csvRow in csvRows:
                     rounded = ["%.2f"%v if isinstance(v, float) else v for v in csvRow]
-                    trace()
-                    pass
-                    csvWriter.writerow(csvRow)
+                    csvWriter.writerow(rounded)
 
             #trace()
             pass
