@@ -421,6 +421,7 @@ def classifyGrowth(box_height, plant_heights_in, border_tb, border_lr):
     NoGerminationSizeThreshold = 50
     NotGrowingSpeedThresh = 10  #distinguish between growing and not growing plant
     RegularGrowthFactor = 0.75
+    MaxStepGrowth = 200         # height growth abone this value to be ragarded as segmentation failure
 
     # while growing, the plant may touch box border. 
     # If this happens in more tham one days, ignore the bad ones
@@ -443,6 +444,13 @@ def classifyGrowth(box_height, plant_heights_in, border_tb, border_lr):
     # avoid situation, when cut_from is 1: no line can be fitted
     cut_from = np.max((2, cut_from))
     plant_heights = ndi.median_filter(plant_heights_in[:cut_from], size=3)
+
+    # exclude step with too large height increase - a symptom of failure
+    growth_steps = (plant_heights[2:]-plant_heights[1:-1])>MaxStepGrowth
+    if growth_steps.any():
+        trace()
+        stepindex = np.nonzero(growth_steps)[0][0]+2
+        plant_heights = plant_heights[:stepindex]
     ix = np.array(range(len(plant_heights)))
 
     # fit linear model to all
