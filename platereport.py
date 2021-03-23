@@ -13,7 +13,7 @@ from tifffile import TiffWriter, TiffFile
 import numpy as np
 import sys, glob, re, os, getopt, csv, tempfile
 import cv2, math, imageio
-import ipdb
+from ipdb import set_trace as trace
 import phlib
 reload(phlib)
 from phlib import disp,plot
@@ -32,7 +32,7 @@ reload(plateplantseg)
 #type	batch	set_nr.	plate_nr.	plate_id	acc_id	row	column
 type,batch,set_nr,plate_nr,plate_id,acc_id,row,column = range(8)
 def loadCsv(ifile):
-    #ipdb.set_trace()
+    #trace()
     acc=defaultdict(list)
     with open(ifile, 'rt', encoding='utf-8') as csvfile:
         reader = csv.reader(csvfile, delimiter='\t', quotechar='"',quoting=csv.QUOTE_MINIMAL)
@@ -174,7 +174,7 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
                 #print(f"Plant {plantnum},{platenum} select_overlaps: removed blob, size {regsize}")
         ovlaps=aux
 
-    #ipdb.set_trace()
+    #trace()
     # select all overlapping regions
     gmask = labels.copy()
     gmask[:]=0
@@ -186,7 +186,7 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
             # if gmask height increases too much, we have the border problem. So fix it
             gmaskheight = np.nonzero(gmask)[0].max() - np.nonzero(gmask)[0].min()
             pmaskheight = np.nonzero(prevmask)[0].max() - np.nonzero(prevmask)[0].min()
-            #ipdb.set_trace()
+            #trace()
             if gmaskheight > 2* pmaskheight:
                 if plantnum in (0, 12): # left side images
                     #print("Plant %2d,%d fix left plant"%(plantnum, platenum))
@@ -195,7 +195,7 @@ def select_overlaps(mask, prevmask, plantnum=-1, platenum=-1):
                     #print("Plant %2d,%d fix right plant"%(plantnum, platenum))
                     gmask = fix_right_plant(gmask, prevmask)
                 pass
-        #ipdb.set_trace()
+        #trace()
     return gmask
 
 def select_largest_overlap(mask, prevmask):
@@ -215,7 +215,7 @@ def segPlateStat(gplate, bgmask=None, thrsigma=4):
     #estimate statistical parameters of what we think is background
     mean, cov = regstat(gplate,bgmask*(gplate < mean + np.sqrt(cov)))
     #return getLargest(bgmask *(gplate > mean + thrsigma*np.sqrt(cov)))
-    #ipdb.set_trace()
+    #trace()
     return gplate > mean + thrsigma*np.sqrt(cov)
 
 def drawHoughLines(gmask, lines):
@@ -302,7 +302,7 @@ def fix_border_plant(gmask, prevmask):
         return gmask
     omask = ndi.binary_opening(gmask, np.ones((25,1)))
     omask = getLargest(omask)
-    #ipdb.set_trace()
+    #trace()
     omask = select_overlaps(gmask-ndi.binary_dilation(omask, np.ones((2,2))), prevmask)
     return omask
 
@@ -341,7 +341,7 @@ def linplotarray(pdata):
 def procplant(plant_name, mask_name):
     masks  = loadTiff(mask_name)
     plates = loadTiff(plant_name)
-    #ipdb.set_trace()
+    #trace()
     maskheight = [np.nonzero(m)[0].max() - np.nonzero(m)[0].min() if m.max() > 0 else 0 for m in masks]
     border_tb = [m[0].any() or m[-1].any() for m in masks]
     border_lr = [m[:,0].any() or m[:,-1].any() for m in masks]
@@ -374,7 +374,7 @@ def usage(desc):
     print("Switches:")
     print("\t-h ............... this usage")
     print("\t-d name .......... directory with plant datasets (%s)"%dirName)
-    print("\t-a id,id,......... list aof accession ids, separated by a comma")
+    print("\t-a id,id,......... list of accession ids, separated by a comma")
     print("\t-r ............... rebuild all")
 
 def parsecmd(desc):
@@ -447,7 +447,7 @@ def main():
                 if not "error" in rr[0][2]:
                     ok_data.append(rr[1])
                     pnames.append("%s/%s"%(rr[0][0],rr[0][1]))
-                    csvRows.append(["control"] + rr[0][:-2] + rr[1])
+                    csvRows.append(["control", accession] + rr[0][:-2] + rr[1])
             oo=np.array(ok_data).T
             omean=oo.mean(axis=1)
             osdev=np.sqrt(oo.var(axis=1))
@@ -467,7 +467,7 @@ def main():
                 if not "error" in rr[0][2]:
                     ok_data.append(rr[1])
                     pnames.append("%s/%s"%(rr[0][0],rr[0][1]))
-                    csvRows.append(["apo"] + rr[0][:-2] + rr[1])
+                    csvRows.append(["apo", accession] + rr[0][:-2] + rr[1])
             oo=np.array(ok_data).T
             omean=oo.mean(axis=1)
             osdev=np.sqrt(oo.var(axis=1))
@@ -482,11 +482,14 @@ def main():
 
             with open("%s/acc-report-%s-csv.csv"%(dirName,accession), "w") as cf:
                 csvWriter = csv.writer(cf, delimiter='\t', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-                csvWriter.writerow(["control/apo"]+hdr1+["Height day %d"%d for d in range(11)])
+                csvWriter.writerow(["Control/apo", "Accession"]+hdr1+["Height day %d"%d for d in range(11)])
                 for csvRow in csvRows:
+                    rounded = ["%.2f"%v if isinstance(v, float) else v for v in csvRow]
+                    trace()
+                    pass
                     csvWriter.writerow(csvRow)
 
-            #ipdb.set_trace()
+            #trace()
             pass
     pass
 if __name__ == "__main__":
