@@ -440,6 +440,8 @@ def classifyGrowth(box_height, plant_heights_in, border_tb, border_lr):
             cut_from = np.min((cut_from, nz.min()))
             valid_range = f"{cut_from} (Left/Right)"
         pass
+    # avoid situation, when cut_from is 1: no line can be fitted
+    cut_from = np.max((2, cut_from))
     plant_heights = ndi.median_filter(plant_heights_in[:cut_from], size=3)
     ix = np.array(range(len(plant_heights)))
 
