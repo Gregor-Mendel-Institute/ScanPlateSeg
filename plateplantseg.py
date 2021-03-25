@@ -421,7 +421,8 @@ def classifyGrowth(box_height, plant_heights_in, border_tb, border_lr):
     NoGerminationSizeThreshold = 50
     NotGrowingSpeedThresh = 10  #distinguish between growing and not growing plant
     RegularGrowthFactor = 0.75
-    MaxStepGrowth = 200         # height growth abone this value to be ragarded as segmentation failure
+    MaxStepGrowth = 300         # height growth abone this value to be ragarded as segmentation failure
+    MinSeedHeight = 10
 
     # while growing, the plant may touch box border. 
     # If this happens in more tham one days, ignore the bad ones
@@ -448,7 +449,7 @@ def classifyGrowth(box_height, plant_heights_in, border_tb, border_lr):
     # exclude step with too large height increase - a symptom of failure
     growth_steps = (plant_heights[2:]-plant_heights[1:-1])>MaxStepGrowth
     if growth_steps.any():
-        trace()
+        #trace()
         stepindex = np.nonzero(growth_steps)[0][0]+2
         plant_heights = plant_heights[:stepindex]
     ix = np.array(range(len(plant_heights)))
@@ -480,13 +481,15 @@ def classifyGrowth(box_height, plant_heights_in, border_tb, border_lr):
         slopes2.append(slope2)
 
     print(plant_heights_in)
-    #trace()
-    if np.max(plant_heights) < NoGerminationSizeThreshold:
+    if np.min(plant_heights) < MinSeedHeight:
+        print(f"Detection error (vanished 1)" )
+        return ["Detection error (vanished 1)" , plant_heights_in[0], None, None, None, None, None, valid_range, allplot]
+    elif np.max(plant_heights) < NoGerminationSizeThreshold:
         print(f"Not germinated")
         return ["Not germinated", plant_heights_in[0], plant_heights_in[1], None, None, None, None, valid_range, allplot]
-    elif np.min(plant_heights) == 0 or slope_all < 0:
-        print(f"Detection error (vanished)" )
-        return ["Detection error (vanished)" , plant_heights_in[0], None, None, None, None, None, valid_range, allplot]
+    elif slope_all < 0:
+        print(f"Detection error (vanished 2)" )
+        return ["Detection error (vanished 2)" , plant_heights_in[0], None, None, None, None, None, valid_range, allplot]
     elif np.max(plant_heights) > 0.95* box_height:
         print(f"Detection error (too large)" )
         return ["Detection error (too large)" , plant_heights_in[0], plant_heights_in[1], None, None, None, None, valid_range, allplot]
