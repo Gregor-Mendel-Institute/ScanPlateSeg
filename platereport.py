@@ -350,9 +350,11 @@ def procplant(plant_name, mask_name):
     # create plant growth image
     cmasks = np.concatenate(masks, axis=1)[::2,::2]
     nz = np.nonzero(cmasks)
-    cmasks = cmasks[nz[0].min()-5 : nz[0].max()+5,:]
+    cmin = max(0, nz[0].min()-5)
+    cmax = min(cmasks.shape[0], nz[0].max()+5)
+    cmasks = cmasks[cmin:cmax,:]
     cplant = np.concatenate(plates, axis=1)[::2,::2]
-    cplant = cplant[nz[0].min()-5 : nz[0].max()+5,:]
+    cplant = cplant[cmin:cmax,:]
     oplant = phlib.img3overlay(cplant, cmasks)
     return return_state+[oplant], maskheight
 
@@ -406,6 +408,7 @@ def main():
 
     accessions = loadCsv(f"{dirName}/{tsvName}")
     for accession in accessions:
+        accession="9990"
         #check first, if all plates exist (important in testing)
         if accIds and not accession in accIds: continue
 
